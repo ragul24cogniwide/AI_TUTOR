@@ -70,7 +70,7 @@ llm = ChatGroq(
  
 # Respond in JSON format as instructed.
 # """
- 
+
 prompt_template = """
 You are a helpful AI tutor. Answer the user's question based on the retrieved documents.
 Rules:
@@ -149,6 +149,20 @@ async def ask_question(request: QueryRequest):
     question = request.question.strip()
     if not question:
         return {"response": "Please ask a valid question.", "images": []}
+    greetings = ["hi", "hello", "hey", "good morning", "good evening", "good afternoon"]
+    if question.lower() in greetings:
+        return {
+            "response": "Hello! How can I help you today?",
+            "images": [],
+            "has_images": False
+        }
+    farewells = ["bye", "goodbye", "see you", "take care", "see you later", "good night"]
+    if any(word in question for word in farewells):
+        return {
+            "response": "Goodbye! Have a great day!",
+            "images": [],
+            "has_images": False
+        }
  
     # Retrieve session history (not used in this example, but saved)
     history = session_store.get(session_id, [])

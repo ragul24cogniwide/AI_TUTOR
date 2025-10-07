@@ -1,10 +1,12 @@
 
+
+version: "3.8"
 services:
   frontend:
     build: ./Frontend
     container_name: react_frontend
     ports:
-      - "5173:5500"
+      - "5173:5173"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -16,10 +18,11 @@ services:
     build: ./backend
     container_name: fastapi_backend
     ports:
-      - "8000:8500"
+      - "8000:8000"
     volumes:
       - ./backend:/app
     environment:
       - PYTHONUNBUFFERED=1
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+   # command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
