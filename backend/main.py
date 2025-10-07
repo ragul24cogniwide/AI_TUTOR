@@ -8,11 +8,15 @@ from langchain_groq import ChatGroq
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 import json
-
-
+import uvicorn
+ 
+# -----------------------------
 # FastAPI app
 app = FastAPI(title="AI Tutor RAG API")
-
+from fastapi.staticfiles import StaticFiles
+ 
+app.mount("/output", StaticFiles(directory="output"), name="output")
+# Allow requests from your frontend
 # Enable CORS for frontend
 origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
 app.add_middleware(
@@ -22,106 +26,272 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+ 
+# -----------------------------
 # Embeddings for querying
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
+ 
 # Load persisted Chroma DB
 math8_db = Chroma(
     persist_directory="chroma_db/math8",
     embedding_function=embeddings
 )
 retriever = math8_db.as_retriever(search_kwargs={"k": 3})
+ 
 print("Retriever loaded:", retriever)
-
+ 
 # Initialize Groq LLM
 llm = ChatGroq(
     model="groq/compound",
-    api_key="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",
+    api_key="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",  # Replace with your key
     temperature=0.7
 )
-
-# Fixed prompt template - simpler, without JSON formatting requirement
+ 
+# -----------------------------
+# Prompt template
+# prompt_template = """
+# You are a helpful AI tutor. Answer the user's question based on the retrieved documents.
+# Rules:
+# 1. Provide a clear and concise answer.
+# 2. Include the image
+# 3. Return output in JSON format:
+# {{
+#   "answer": "<your answer text>",
+#   "images": [{{"url": "<image_url>"}}]
+# }}
+# If no images, return an empty list for images.
+ 
+# Context from documents:
+# {context}
+ 
+# Question:
+# {question}
+ 
+# Respond in JSON format as instructed.
+# """
+ 
+prompt_template = """
+You are a helpful AI tutor. Answer the user's question based on the retrieved documents.
+Rules:
+1. Provide a clear and concise answer.
+2. Include the image if available.
+   "Use the given context to answer the question. "
+    "If you don't know the answer, say you don't know. "
+    "Use three sentences maximum and keep the answer concise. "
+    "Don't guide with any external resources. "
+    "Strictly follow the instructions and language used in the original context. "
+    "If the context contains images in Markdown format like ![](image_url), "
+    "extract the image URL and include it in the response under 'image_data'. "
+    "Always return the final response in this JSON format:\n"
+    "If there any equation in the context it should be converted in human-readable format"
+    "{{\n"
+    "  'answer': '<LLM response here>',\n"
+    "  'images': [{{"url": "<image_url>"}}]
+    "}}\n"
+ 
+    "Context: {context}"
+"""
+ 
 prompt = PromptTemplate(
     input_variables=["context", "question"],
-    template="""You are a helpful AI tutor. Answer the user's question clearly and concisely based on the provided context.
-
-Context from documents:
-{context}
-
-Question: {question}
-
-Answer:"""
+    template=prompt_template
 )
-
-# Build RAG QA chain with correct input variable mapping
+ 
+# -----------------------------
+# Build RAG QA chain
 qa = RetrievalQA.from_chain_type(
     llm=llm,
     chain_type="stuff",
     retriever=retriever,
     return_source_documents=True,
-    chain_type_kwargs={
-        "prompt": prompt,
-        "verbose": False
-    }
+    chain_type_kwargs={"prompt": prompt}
 )
-
+ 
+# -----------------------------
 # Pydantic model for request
 class QueryRequest(BaseModel):
     session_id: str
     question: str
-
+ 
 # In-memory session store
 session_store: Dict[str, List[Dict[str, str]]] = {}
-
+ 
+# -----------------------------
 # POST endpoint
 @app.post("/ask")
 async def ask_question(request: QueryRequest):
     session_id = request.session_id
     question = request.question.strip()
-    
     if not question:
         return {"response": "Please ask a valid question.", "images": []}
-
+ 
+    # Retrieve session history (not used in this example, but saved)
     history = session_store.get(session_id, [])
-
+ 
+    # Invoke LLM via RAG
+    result = qa.invoke({"query": question})  # ✅ FIXED: input key must be "query"
+    print(f"LLM response: {result}")
+    # Try parsing JSON from LLM output
     try:
-        # Call the QA chain with correct input key "query"
-        result = qa({"query": question})
-        
-        # Extract answer text
-        answer_text = result.get("result", "")
-        
-        # Collect images from source documents
+        parsed = json.loads(result['result'])
+        answer_text = parsed.get("answer", "")
+        images = parsed.get("images", [])
+    except json.JSONDecodeError:
+        # fallback if LLM doesn't respond in JSON
+        answer_text = result['result']
         images = []
-        for doc in result.get("source_documents", []):
-            if "image_url" in doc.metadata:
-                url = doc.metadata["image_url"]
-                if url not in [img.get("url") for img in images]:
-                    images.append({"url": url})
-        
-        # Store history
-        history.append({"query": question, "answer": answer_text})
-        session_store[session_id] = history
-        
-        return {
-            "response": answer_text,
-            "images": images,
-            "has_images": len(images) > 0
-        }
+ 
+    # Add images from source docs if available and not already included
+    for doc in result.get("source_documents", []):
+        if "image_url" in doc.metadata:
+            url = doc.metadata["image_url"]
+            if url not in [img.get("url") for img in images]:
+                images.append({"url": url})
+ 
+    # Store history
+    history.append({"question": question, "answer": answer_text})
+    session_store[session_id] = history
+ 
+    return {
+        "response": answer_text,
+        "images": images,
+        "has_images": len(images) > 0
+    }
+ 
+# -----------------------------
+# Run with Uvicorn
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# from fastapi import FastAPI
+# from pydantic import BaseModel
+# from typing import Dict, List
+# from fastapi.middleware.cors import CORSMiddleware
+# from langchain_community.vectorstores import Chroma
+# from langchain_community.embeddings import HuggingFaceEmbeddings
+# from langchain_groq import ChatGroq
+# from langchain.chains import RetrievalQA
+# from langchain.prompts import PromptTemplate
+# import json
+
+
+# # FastAPI app
+# app = FastAPI(title="AI Tutor RAG API")
+# from fastapi.staticfiles import StaticFiles
+# app.mount("/output", StaticFiles(directory="output"), name="output")
+
+# # Enable CORS for frontend
+# origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=origins,
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
+# # Embeddings for querying
+# embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+# # Load persisted Chroma DB
+# math8_db = Chroma(
+#     persist_directory="chroma_db/math8",
+#     embedding_function=embeddings
+# )
+# retriever = math8_db.as_retriever(search_kwargs={"k": 3})
+# print("Retriever loaded:", retriever)
+
+# # Initialize Groq LLM
+# llm = ChatGroq(
+#     model="groq/compound",
+#     api_key="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",
+#     temperature=0.7
+# )
+
+# # Fixed prompt template - simpler, without JSON formatting requirement
+# prompt = PromptTemplate(
+#     input_variables=["context", "question"],
+#     template="""You are a helpful AI tutor. Answer the user's question clearly and concisely based on the provided context.
+
+# Context from documents:
+# {context}
+
+# Question: {question}
+
+# Answer:"""
+# )
+
+# # Build RAG QA chain with correct input variable mapping
+# qa = RetrievalQA.from_chain_type(
+#     llm=llm,
+#     chain_type="stuff",
+#     retriever=retriever,
+#     return_source_documents=True,
+#     chain_type_kwargs={
+#         "prompt": prompt,
+#         "verbose": False
+#     }
+# )
+
+# # Pydantic model for request
+# class QueryRequest(BaseModel):
+#     session_id: str
+#     question: str
+
+# # In-memory session store
+# session_store: Dict[str, List[Dict[str, str]]] = {}
+
+# # POST endpoint
+# @app.post("/ask")
+# async def ask_question(request: QueryRequest):
+#     session_id = request.session_id
+#     question = request.question.strip()
     
-    except Exception as e:
-        print(f"Error processing question: {str(e)}")
-        return {
-            "response": f"An error occurred: {str(e)}",
-            "images": [],
-            "has_images": False
-        }
+#     if not question:
+#         return {"response": "Please ask a valid question.", "images": []}
 
-@app.get("/")
-async def root():
-    return {"message": "AI Tutor RAG API is running"}
+#     history = session_store.get(session_id, [])
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
+#     try:
+#         # Call the QA chain with correct input key "query"
+#         result = qa({"query": question})
+        
+#         # Extract answer text
+#         answer_text = result.get("result", "")
+        
+#         # Collect images from source documents
+#         images = []
+#         for doc in result.get("source_documents", []):
+#             if "image_url" in doc.metadata:
+#                 url = doc.metadata["image_url"]
+#                 if url not in [img.get("url") for img in images]:
+#                     images.append({"url": url})
+        
+#         # Store history
+#         history.append({"query": question, "answer": answer_text})
+#         session_store[session_id] = history
+        
+#         return {
+#             "response": answer_text,
+#             "images": images,
+#             "has_images": len(images) > 0
+#         }
+    
+#     except Exception as e:
+#         print(f"Error processing question: {str(e)}")
+#         return {
+#             "response": f"An error occurred: {str(e)}",
+#             "images": [],
+#             "has_images": False
+#         }
+
+# @app.get("/")
+# async def root():
+#     return {"message": "AI Tutor RAG API is running"}
+
+# @app.get("/health")
+# async def health_check():
+#     return {"status": "healthy"}
+
+# if __name__ == "__main__":
+#     uvicorn.run(app, host="0.0.0.0", port=8000)

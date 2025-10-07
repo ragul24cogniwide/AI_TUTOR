@@ -108,11 +108,11 @@ export default function ChatBot() {
                       {msg.images.map((img, i) => (
                         <div key={i} className="border border-gray-200 rounded-lg overflow-hidden bg-white">
                           <img
-                            src={img.url.startsWith('http') ? img.url : `http://127.0.0.1:8000${img.url}`}
-                            alt={`Diagram ${i+1}`}
-                            className="w-full h-auto max-h-48 object-contain"
-                            onError={(e) => { e.target.style.display = 'none'; }}
-                          />
+                              src={`http://127.0.0.1:8000/output/book8/math8/${img.url}`} // prepend backend host
+                              alt={'Diagram'}  
+                              className="w-full h-auto max-h-48 object-contain"
+                              onError={(e) => { e.target.style.display = 'none'; }}
+                            />
                         </div>
                       ))}
                     </div>
