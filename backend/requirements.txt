@@ -1,0 +1,24 @@
+# Core LangChain
+langchain>=0.1.0
+
+# LangChain community modules (Chroma & other vectorstores)
+langchain-community>=0.0.234
+
+# Chroma vector database
+chromadb>=0.4.5
+
+# HuggingFace embeddings for local/free embeddings
+sentence-transformers>=2.2.2
+transformers>=4.34.0
+torch>=2.1.0
+
+# Azure/OpenAI (optional if you want to switch back to Azure embeddings)
+# openai>=1.27.0
+
+# Environment variable management (optional but recommended)
+python-dotenv>=1.0.0
+
+fastapi==0.104.0
+uvicorn[standard]==0.24.0
+
+langchain-groq==0.1.3
