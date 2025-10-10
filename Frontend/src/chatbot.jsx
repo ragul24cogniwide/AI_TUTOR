@@ -8,10 +8,17 @@ export default function ChatBot() {
   const [messages, setMessages] = useState([{ role: 'assistant', content: starter, images: [] }]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedBook, setSelectedBook] = useState('');
-  const [books, setBooks] = useState(['math7', 'math8']); // available standards
-  const messagesEndRef = useRef(null);
 
+  const [selectedGrade, setSelectedGrade] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
+
+  const grades = ['grade7', 'grade8']; // available grades
+  const subjects = {
+    grade7: ['math7'], // add other subjects if needed
+    grade8: ['math8'],
+  };
+
+  const messagesEndRef = useRef(null);
   const API_URL = 'http://127.0.0.1:8000/ask';
 
   // Generate or retrieve session_id
@@ -24,14 +31,12 @@ export default function ChatBot() {
     return existing;
   });
 
-  // Scroll to bottom
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => { scrollToBottom(); }, [messages]);
 
-  // Send message to backend
   const sendMessage = async (text) => {
     const messageText = (typeof text === 'string' && text.trim()) ? text.trim() : input.trim();
-    if (!messageText || !selectedBook || isLoading) return;
+    if (!messageText || !selectedGrade || !selectedSubject || isLoading) return;
 
     setMessages(prev => [...prev, { role: 'user', content: messageText, images: [] }]);
     setInput('');
@@ -44,7 +49,8 @@ export default function ChatBot() {
         body: JSON.stringify({
           session_id: sessionId,
           question: messageText,
-          book: selectedBook // pass the selected book
+          grade: `${selectedGrade}`,
+          subject:`${selectedSubject}` // send grade/subject combination
         }),
       });
 
@@ -88,17 +94,26 @@ export default function ChatBot() {
           <p className="text-xs text-white/90">Your personal learning assistant</p>
         </div>
 
-        {/* Book selector */}
+        {/* Grade & Subject selectors */}
         <select
-          value={selectedBook}
-          onChange={(e) => setSelectedBook(e.target.value)}
+          value={selectedGrade}
+          onChange={(e) => { setSelectedGrade(e.target.value); setSelectedSubject(''); }}
           className="ml-auto px-2 py-1 rounded bg-white text-gray-900 text-sm"
         >
-          <option value="">Select standard/book</option>
-          {books.map((b) => (
-            <option key={b} value={b}>{b}</option>
-          ))}
+          <option value="">Select grade</option>
+          {grades.map((g) => (<option key={g} value={g}>{g}</option>))}
         </select>
+
+        {selectedGrade && (
+          <select
+            value={selectedSubject}
+            onChange={(e) => setSelectedSubject(e.target.value)}
+            className="ml-2 px-2 py-1 rounded bg-white text-gray-900 text-sm"
+          >
+            <option value="">Select subject</option>
+            {subjects[selectedGrade].map((s) => (<option key={s} value={s}>{s}</option>))}
+          </select>
+        )}
       </div>
 
       {/* Messages */}
@@ -123,7 +138,7 @@ export default function ChatBot() {
                       {msg.images.map((img, i) => (
                         <div key={i} className="border border-gray-200 rounded-lg overflow-hidden bg-white">
                           <img
-                            src={`http://127.0.0.1:8000/backend/ai_tutor_rag/output/book/${selectedBook}${img.url}`}
+                            src={`http://127.0.0.1:8000/backend/ai_tutor_rag/output/book/${selectedGrade}/${selectedSubject}/${img.url}`}
                             alt={'Diagram'}  
                             className="w-full h-auto max-h-48 object-contain"
                             onError={(e) => { e.target.style.display = 'none'; }}
@@ -164,13 +179,13 @@ export default function ChatBot() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask me anything..."
-            disabled={isLoading || !selectedBook} // require book selection
+            disabled={isLoading || !selectedGrade || !selectedSubject}
             rows={2}
             className="flex-1 px-4 py-2 text-sm rounded-xl bg-white text-gray-900 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
           />
           <button
             onClick={() => sendMessage()}
-            disabled={!input.trim() || !selectedBook || isLoading}
+            disabled={!input.trim() || !selectedGrade || !selectedSubject || isLoading}
             className="bg-indigo-600 text-white px-5 py-2 rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           >
             <Send className="w-5 h-5" />
