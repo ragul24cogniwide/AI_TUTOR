@@ -8,18 +8,9 @@ export default function ChatBot() {
   const [messages, setMessages] = useState([{ role: 'assistant', content: starter, images: [] }]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
-  const [selectedGrade, setSelectedGrade] = useState('');
-  const [selectedSubject, setSelectedSubject] = useState('');
-
-  const grades = ['grade7', 'grade8']; // available grades
-  const subjects = {
-    grade7: ['math7'], // add other subjects if needed
-    grade8: ['math8'],
-  };
-
   const messagesEndRef = useRef(null);
-  const API_URL = 'http://127.0.0.1:8000/ask';
+
+  const API_URL = 'http://127.0.0.1:8000/tutor/ask';
 
   // Generate or retrieve session_id
   const [sessionId] = useState(() => {
@@ -31,12 +22,14 @@ export default function ChatBot() {
     return existing;
   });
 
+  // Scroll to bottom
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => { scrollToBottom(); }, [messages]);
 
+  // Send message to backend
   const sendMessage = async (text) => {
     const messageText = (typeof text === 'string' && text.trim()) ? text.trim() : input.trim();
-    if (!messageText || !selectedGrade || !selectedSubject || isLoading) return;
+    if (!messageText || isLoading) return;
 
     setMessages(prev => [...prev, { role: 'user', content: messageText, images: [] }]);
     setInput('');
@@ -46,12 +39,7 @@ export default function ChatBot() {
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          question: messageText,
-          grade: `${selectedGrade}`,
-          subject:`${selectedSubject}` // send grade/subject combination
-        }),
+        body: JSON.stringify({ session_id: sessionId, question: messageText }),
       });
 
       if (!res.ok) {
@@ -60,13 +48,20 @@ export default function ChatBot() {
       }
 
       const data = await res.json();
-      const images = Array.isArray(data.images) ? data.images : [];
 
+      // Ensure images is an array
+      const images = Array.isArray(data.images) ? data.images : [];
+      console.log(images)
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: data.response,
-        images: images
+        images: images,
+        type: data.type,
       }]);
+
+      if (data.type =='cleared'){
+        setMessages([{ role: 'assistant', content: starter, images: [] }])
+      }
     } catch (err) {
       console.error('Send error', err);
       setMessages(prev => [...prev, { role: 'assistant', content: 'Oops — could not reach the server. Try again.', images: [] }]);
@@ -93,27 +88,6 @@ export default function ChatBot() {
           <h2 className="text-lg font-bold">Student AI Tutor</h2>
           <p className="text-xs text-white/90">Your personal learning assistant</p>
         </div>
-
-        {/* Grade & Subject selectors */}
-        <select
-          value={selectedGrade}
-          onChange={(e) => { setSelectedGrade(e.target.value); setSelectedSubject(''); }}
-          className="ml-auto px-2 py-1 rounded bg-white text-gray-900 text-sm"
-        >
-          <option value="">Select grade</option>
-          {grades.map((g) => (<option key={g} value={g}>{g}</option>))}
-        </select>
-
-        {selectedGrade && (
-          <select
-            value={selectedSubject}
-            onChange={(e) => setSelectedSubject(e.target.value)}
-            className="ml-2 px-2 py-1 rounded bg-white text-gray-900 text-sm"
-          >
-            <option value="">Select subject</option>
-            {subjects[selectedGrade].map((s) => (<option key={s} value={s}>{s}</option>))}
-          </select>
-        )}
       </div>
 
       {/* Messages */}
@@ -125,30 +99,53 @@ export default function ChatBot() {
                 {msg.role === 'user' ? <User className="w-5 h-5 text-white" /> : <img src={readingImg} alt="Tutor" className="w-5 h-5 rounded-full" />}
               </div>
 
-              <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'bg-sky-500 text-white' : 'bg-white text-gray-900 border border-indigo-200'} shadow`}>
-                <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+              <div
+  className={`max-w-[75%] rounded-2xl px-5 py-4 transition-all duration-300 
+    shadow-md border 
+    ${msg.role === 'user' 
+      ? 'bg-sky-500 text-white border-sky-600' 
+      : 'bg-white text-gray-900 border-indigo-200'}`}
+>
+  {/* Type label */}
+  <small className={`block text-xs text-right ${msg.role === 'user' ? 'text-sky-100' : 'text-indigo-400'}`}>
+    {msg.type}
+  </small>
 
-                {msg.images && msg.images.length > 0 && (
-                  <div className="mt-2 space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-blue-600">
-                      <ImageIcon className="w-4 h-4" />
-                      <span>Related diagrams:</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {msg.images.map((img, i) => (
-                        <div key={i} className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-                          <img
-                            src={`http://127.0.0.1:8000/backend/ai_tutor_rag/output/book/${selectedGrade}/${selectedSubject}/${img.url}`}
-                            alt={'Diagram'}  
-                            className="w-full h-auto max-h-48 object-contain"
-                            onError={(e) => { e.target.style.display = 'none'; }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+  {/* Message content */}
+  {/* Message content */}
+<div
+  className="mt-1 whitespace-pre-wrap break-words leading-relaxed text-sm sm:text-base"
+  dangerouslySetInnerHTML={{ __html: msg.content }}
+/>
+
+
+  {/* Render images */}
+  {msg.images?.length > 0 && (
+    <div className="mt-4 space-y-2">
+      <div className="flex items-center gap-2 text-sm font-medium text-blue-600">
+        <ImageIcon className="w-4 h-4" />
+        <span>Related diagrams:</span>
+      </div>
+      
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+        {msg.images.map((img, i) => (
+          <div
+            key={i}
+            className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow duration-200"
+          >
+            <img
+              src={`http://127.0.0.1:8000/backend/app/tutor_assistant/output/images/${img}`}
+              alt="Diagram"
+              className="w-full h-auto max-h-72 object-contain"
+              onError={(e) => { e.target.style.display = 'none'; }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+</div>
+
             </div>
           </div>
         ))}
@@ -179,20 +176,21 @@ export default function ChatBot() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask me anything..."
-            disabled={isLoading || !selectedGrade || !selectedSubject}
+            disabled={isLoading}
             rows={2}
             className="flex-1 px-4 py-2 text-sm rounded-xl bg-white text-gray-900 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
           />
           <button
             onClick={() => sendMessage()}
-            disabled={!input.trim() || !selectedGrade || !selectedSubject || isLoading}
+            disabled={!input.trim() || isLoading}
             className="bg-indigo-600 text-white px-5 py-2 rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           >
             <Send className="w-5 h-5" />
           </button>
         </div>
       </div>
-            <style>{`
+
+      <style>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: translateY(0); }
@@ -202,4 +200,3 @@ export default function ChatBot() {
     </div>
   );
 }
-
