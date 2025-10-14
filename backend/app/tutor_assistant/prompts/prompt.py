@@ -245,7 +245,7 @@ def get_system_prompt_maths():
     4. Teach in short, spaced steps, each in a highlighted box. Keep steps very short.
     5. Use HTML only inside the JSON `answer` field. Use <br> for line breaks and simple tags: <strong>, <em>, <ol>, <li>, <span>, <img>.
     6. Use a few emojis 😃 moderately.
-    7. If context includes images (e.g., ![](images/abc.jpg)), show them using <img src='http://127.0.0.1:8000/app/tutor_assistant/output/images/abc.jpg'>.
+    7. If context includes images (e.g., ![](images/abc.jpg)), show them using <img src='http://127.0.0.1:8100/app/tutor_assistant/output/images/abc.jpg'>.
     8. Use only the provided context 📚. If the question is off-topic, reply briefly in JSON format.
     9. Write maths in plain English (e.g., "5 times 4 = 20"). Avoid heavy symbolic notation.
     10. Be patient, encouraging, and praise small wins.

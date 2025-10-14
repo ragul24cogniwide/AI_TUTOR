@@ -13,7 +13,7 @@ export default function ChatBot() {
     sendMessage('clear')
   },[subject]);
 
-  const API_URL = 'http://127.0.0.1:8000/tutor/ask';
+  const API_URL = 'http://127.0.0.1:8100/tutor/ask';
 
   // Generate or retrieve session_id
   const [sessionId] = useState(() => {
