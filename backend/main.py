@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 
-origins = ["http://localhost:5173", "http://127.0.0.1:5173","http://10.10.20.151:5173"]
+origins = ["http://localhost:5173", "http://127.0.0.1:5173","http://10.10.20.151:5173","https://schooldigitalised.cogniwide.com"]
 
 app.add_middleware(
     CORSMiddleware,
