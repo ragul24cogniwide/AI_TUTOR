@@ -13,7 +13,7 @@ export default function ChatBot() {
     sendMessage('clear')
   },[subject]);
 
-  const API_URL = 'http://10.10.20.151:8100/tutor/ask';
+  const API_URL = 'https://schooldigitalised.cogniwide.com:6443/api/sd/tutor/ask';
 
   // Generate or retrieve session_id
   const [sessionId] = useState(() => {
