@@ -51,7 +51,12 @@ export default function ChatBot() {
       const images = Array.isArray(data.images) ? data.images : [];
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: data.response,
+        content: data.response.replace(/<\/?strong>/g, '')
+  // Replace <hint> with styled <div>
+        .replace(
+          /<hint>\s*(.*?)\s*<\/hint>/gs,
+          `<div style="background-color:#e6f3ff; padding:8px; border-radius:8px; font-style: italic;">$1</div>`
+        ),
         images: images,
         type: data.type,
       }]);
