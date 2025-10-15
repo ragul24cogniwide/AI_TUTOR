@@ -57,14 +57,20 @@ async def ask_question(request: QueryRequest):
     answer_text = result.strip()
     images_raw = []
     type = "answer"
+    buttons = []
+    correct_answer = False
 
     # Handle JSON structured responses (if your model returns JSON)
     try:
         parsed = json.loads(answer_text)
+        print("parsed",parsed)
         if isinstance(parsed, dict):
             answer_text = parsed.get("answer", "").strip()
             images_raw = parsed.get("images", [])
             type = parsed.get("type", "answer")
+            buttons = parsed.get("buttons", [])
+            correct_answer = parsed.get("correct_answer", False)
+
     except json.JSONDecodeError:
         pass
 
@@ -81,7 +87,9 @@ async def ask_question(request: QueryRequest):
 
     return {
         "response": answer_text,
-        "images": images_raw,
-        "has_images": len(images_raw) > 0,
-        "type": type,
+        "buttons": buttons,
+        "correct_answer": correct_answer,
+        # "images": images_raw,
+        # "has_images": len(images_raw) > 0,
+        # "type": type,
     }
