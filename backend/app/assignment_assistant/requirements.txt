@@ -3,3 +3,5 @@ python-dotenv
 pdf2image
 pytesseract
 Pillow
+python-multipart
+python-docx
