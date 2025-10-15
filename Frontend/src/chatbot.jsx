@@ -18,7 +18,7 @@ export default function ChatBot() {
     initialMessage(subject)
   },[subject]);
 
-  const API_URL = 'http://127.0.0.1:8000/tutor/ask';
+  const API_URL = 'https://schooldigitalised.cogniwide.com:6443/api/sd/tutor/ask';
 
 
 
