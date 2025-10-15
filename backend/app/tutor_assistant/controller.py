@@ -93,3 +93,68 @@ async def ask_question(request: QueryRequest):
         # "has_images": len(images_raw) > 0,
         # "type": type,
     }
+
+
+@tutor_router.get("/get-initial-response/{subject}")
+async def get_initial_response(subject: str):
+    if subject == "maths":
+        return {
+            "response": "<strong>I'm Trained with the below topics Please ask me about them.</strong>",
+            "data":[
+            {  "title": "Large Numbers Around Us"},
+            {  "title": "Arithmetic Expressions" },
+            {  "title": "A Peek Beyond the Point" },
+            {  "title": "Expressions using Letter-Numbers" },
+            {  "title": "Parallel and Intersecting Lines" },
+            {  "title": "Number Play" },
+            {  "title": "A Tale of Three Intersecting Lines" },
+            {  "title": "Working with Fractions" },
+            ]
+
+            }
+    if subject == "english":
+        return {
+            "response": "<strong>I'm Trained with the below topics Please ask me about them.</strong>",
+            "data":[
+  {
+    "unit": "Unit 1: Learning Together",
+    "chapters": [
+      { "title": "The Day the River Spoke", "page": 1 },
+      { "title": "Try Again", "page": 16 },
+      { "title": "Three Days to See", "page": 28 },
+    ],
+  },
+  {
+    "unit": "Unit 2: Wit and Humour",
+    "chapters": [
+      { "title": "Animals, Birds, and Dr. Dolittle", "page": 43 },
+      { "title": "A Funny Man", "page": 59 },
+      { "title": "Say the Right Thing", "page": 70 },
+    ],
+  },
+  {
+    "unit": "Unit 3: Dreams and Discoveries",
+    "chapters": [
+      { "title": "My Brother’s Great Invention", "page": 91 },
+      { "title": "Paper Boats", "page": 109 },
+      { "title": "118", "page": 118 }, 
+    ],
+  },
+  {
+    "unit": "Unit 4: Travel and Adventure",
+    "chapters": [
+      { "title": "The Tunnel", "page": 139 },
+      { "title": "Travel", "page": 157 },
+      { "title": "Conquering the Summit", "page": 166 },
+    ],
+  },
+  {
+    "unit": "Unit 5: Bravehearts",
+    "chapters": [
+      { "title": "A Homage to Our Brave Soldiers", "page": 179 },
+      { "title": "My Dear Soldiers", "page": 199 },
+      { "title": "Rani Abbakka", "page": 206 },
+    ],
+  }
+            ]
+        }
