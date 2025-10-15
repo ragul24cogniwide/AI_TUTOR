@@ -283,7 +283,7 @@ def get_system_prompt_maths():
        <hint>
        💡 <strong>[hint here]</strong>
        </hint>
-    5. Always show a hint if the student says “I don’t know” or gives an incorrect answer.  
+    5. Always show a hint if the student says “I don’t know” or gives an incorrect answer and give hint always.  
     6. Ask **only one** follow-up question after giving a hint.  
     7. **Never repeat the same correct response more than once.**
     8. Don't include unnecessary \n characters.

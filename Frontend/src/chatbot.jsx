@@ -7,13 +7,29 @@ export default function ChatBot() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [subject, setSubject] = useState('english');
+  const [chapter, setChapter] = useState([]);
   const messagesEndRef = useRef(null);
+  const [showChapters, setShowChapters] = useState(true);
+
+
 
   useEffect(()=>{
     sendMessage('clear')
+    initialMessage(subject)
   },[subject]);
 
   const API_URL = 'http://127.0.0.1:8000/tutor/ask';
+
+
+
+  const initialMessage = async (subject) => {
+    const response = await fetch(`http://127.0.0.1:8000/tutor/get-initial-response/${subject}`);
+    const data = await response.json();
+    setMessages(prev => [...prev, { role: 'assistant', content: data?.response}]);
+    console.log(data?.data);
+    setChapter(data?.data);
+
+  }
 
   // Generate or retrieve session_id
   const [sessionId] = useState(() => {
@@ -27,50 +43,54 @@ export default function ChatBot() {
 
   // Send message to backend
   const sendMessage = async (text) => {
-    const messageText = (typeof text === 'string' && text.trim()) ? text.trim() : input.trim();
-    if (!messageText || isLoading) return;
+  const messageText = (typeof text === 'string' && text.trim()) ? text.trim() : input.trim();
+  if (!messageText || isLoading) return;
 
-    setMessages(prev => [...prev, { role: 'user', content: messageText, images: [] }]);
-    setInput('');
-    setIsLoading(true);
+  // Hide chapters if user clicked
+  setShowChapters(false);
 
-    try {
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, question: messageText, subject: subject }),
-      });
+  setMessages(prev => [...prev, { role: 'user', content: messageText, images: [] }]);
+  setInput('');
+  setIsLoading(true);
 
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(errText || 'Network error');
-      }
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, question: messageText, subject: subject }),
+    });
 
-      const data = await res.json();
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(errText || 'Network error');
+    }
 
-      const images = Array.isArray(data.images) ? data.images : [];
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: data.response.replace(/<\/?strong>/g, '')
-  // Replace <hint> with styled <div>
+    const data = await res.json();
+
+    const images = Array.isArray(data.images) ? data.images : [];
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: data.response.replace(/<\/?strong>/g, '')
         .replace(
           /<hint>\s*(.*?)\s*<\/hint>/gs,
           `<div style="background-color:#e6f3ff; padding:8px; border-radius:8px; font-style: italic;">$1</div>`
         ),
-        images: images,
-        type: data.type,
-      }]);
+      images: images,
+      type: data.type,
+    }]);
 
-      if (data.type === 'cleared') {
-        setMessages([{ role: 'assistant', content: starter, images: [] }])
-      }
-    } catch (err) {
-      console.error('Send error', err);
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Oops — could not reach the server. Try again.', images: [] }]);
-    } finally {
-      setIsLoading(false);
+    if (data.type === 'cleared') {
+      setMessages([{ role: 'assistant', content: starter, images: [] }]);
+      setShowChapters(true); // reset for new session
     }
-  };
+  } catch (err) {
+    console.error('Send error', err);
+    setMessages(prev => [...prev, { role: 'assistant', content: 'Oops — could not reach the server. Try again.', images: [] }]);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -210,6 +230,48 @@ export default function ChatBot() {
           </div>
         ))}
 
+      <div className="max-w-4xl mx-auto space-y-6">
+  {showChapters && Array.isArray(chapter) && (
+    <>
+      {/* Case 1: Check if it's a flat list (maths chapters) */}
+      {chapter.every(item => 'title' in item && !('chapters' in item)) ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+          {chapter.map((item, idx) => (
+            <button 
+              key={idx}
+              onClick={() => sendMessage(item.title)}
+              className="px-4 py-2 bg-purple-200 text-purple-800 rounded-full hover:bg-purple-300 transition-colors"
+            >
+              {item.title}
+            </button>
+          ))}
+        </div>
+      ) : (
+        // Case 2: English-style grouped by unit
+        chapter.map((unit, unitIdx) => (
+          <div key={unitIdx}>
+            <h3 className="text-lg font-semibold text-gray-700 mb-2">{unit.unit}</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {unit.chapters.map((item, idx) => (
+                <button 
+                  key={idx}
+                  onClick={() => sendMessage(item.title)}
+                  className="px-4 py-2 bg-purple-200 text-purple-800 rounded-full hover:bg-purple-300 transition-colors"
+                >
+                  {item.title}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))
+      )}
+    </>
+  )}
+</div>
+
+
+
+
         {/* Loading indicator with enhanced animation */}
         {isLoading && (
           <div className="flex gap-3 items-start animate-slideIn">
@@ -231,7 +293,8 @@ export default function ChatBot() {
 
         <div ref={messagesEndRef} />
       </div>
-
+  
+     
       {/* Enhanced Input Area */}
       <div className="relative p-4 bg-white/80 backdrop-blur-xl border-t border-purple-100 shadow-2xl">
         <div className="absolute inset-0 bg-gradient-to-r from-purple-50 to-pink-50 opacity-50"></div>
