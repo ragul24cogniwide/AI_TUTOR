@@ -3,13 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.tutor_assistant.controller import tutor_router
 import uvicorn
 from app.tutor_assistant.model import TutorAssistant
-from app.tutor_assistant.model import RetrivalChain
 from fastapi.staticfiles import StaticFiles
 
 
 app = FastAPI()
 
-origins = ["http://localhost:5173", "http://127.0.0.1:5173","http://10.10.20.151:5173"]
+origins = ["http://localhost:5173", "http://127.0.0.1:5173","http://10.10.20.151:5173","https://schooldigitalised.cogniwide.com:6443"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,6 +28,9 @@ app.mount(
 )
 
 app.include_router(tutor_router)
+
+# tutor_assistant = TutorAssistant()
+# tutor_assistant.load_file()
 
 
 if __name__ == "__main__":

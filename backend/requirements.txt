@@ -23,8 +23,10 @@ uvicorn[standard]==0.24.0
 
 langchain-groq
 
+
 openai>=1.6.0
 python-dotenv
 pdf2image
 pytesseract
 Pillow
+

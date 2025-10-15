@@ -1,110 +1,160 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import Dict, List
-from fastapi.middleware.cors import CORSMiddleware
-from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_groq import ChatGroq
-from langchain.chains import RetrievalQA
-from langchain.prompts import PromptTemplate
-from langchain.prompts import ChatPromptTemplate
-from langchain.chains import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-import re
-import json
-import uvicorn
 from fastapi import APIRouter
-
-
+from pydantic import BaseModel
+from typing import Dict
+from langchain_core.messages import HumanMessage, AIMessage
 from app.tutor_assistant.model import RetrivalChain
+import json, re
 
-
+# Create the router
 tutor_router = APIRouter(
-    prefix="/tutor",  
-    tags=["tutor"]    
+    prefix="/tutor",
+    tags=["tutor"]
 )
 
-
+# Request model
 class QueryRequest(BaseModel):
     session_id: str
     question: str
- 
-session_histories: Dict[str, List] = {}
+    subject: str
+
+# 🧠 Session memory map — stores one RetrivalChain per user session
+tutor_sessions: Dict[str, RetrivalChain] = {}
 
 @tutor_router.post("/ask")
 async def ask_question(request: QueryRequest):
-    session_id = request.session_id
+    session_id = request.session_id.strip()
     question = request.question.strip()
 
-    if session_id not in session_histories:
-        session_histories[session_id] = []
-
-    history = session_histories[session_id]
-
     if not question:
-        return {"response": "Please ask a valid question.", "images": [], "has_images": False, "type": "invalid"}
+        return {
+            "response": "Please ask a valid question.",
+            "images": [],
+            "has_images": False,
+            "type": "invalid",
+        }
 
+    # 🔄 "clear" command resets session memory
     if question.lower() == "clear":
-        session_histories[session_id] = []
-        return {"response": "History cleared.", "images": [], "has_images": False, "type": "cleared"}
+        if session_id in tutor_sessions:
+            del tutor_sessions[session_id]
+        return {
+            "response": "✅ Memory cleared for this session.",
+            "images": [],
+            "has_images": False,
+            "type": "cleared",
+        }
 
-    history.append(HumanMessage(content=question))
-    retriver = RetrivalChain()
-    retriver.get_documents() 
-    chain = retriver.summarize_results()
-    result = chain.invoke({"input": question, "chat_history": history})
-    history.append(AIMessage(content=result["answer"]))
-    answer_text = result['answer']
-    images = []
+    # 🧩 Get or create a retrieval chain with memory for this session
+    if session_id not in tutor_sessions:
+        retriever = RetrivalChain(request.subject)
+        retriever.get_documents()
+        tutor_sessions[session_id] = retriever
+    else:
+        retriever = tutor_sessions[session_id]
+
+    # 🧠 Ask the question (uses ConversationalRetrievalChain + memory)
+    result = await retriever.chat(question)
+    answer_text = result.strip()
+    images_raw = []
     type = "answer"
+    buttons = []
+    correct_answer = False
 
+    # Handle JSON structured responses (if your model returns JSON)
     try:
         parsed = json.loads(answer_text)
-
-        # Case: parsed is a JSON string (e.g. double stringified)
-        if isinstance(parsed, str):
-            try:
-                parsed = json.loads(parsed)
-            except json.JSONDecodeError:
-                answer_text = parsed.strip()
-                parsed = {}
-
+        print("parsed",parsed)
         if isinstance(parsed, dict):
             answer_text = parsed.get("answer", "").strip()
             images_raw = parsed.get("images", [])
             type = parsed.get("type", "answer")
-        else:
-            # Fallback if not a dict
-            answer_text = result['answer'].strip()
-            images_raw = []
-            type = "answer"
+            buttons = parsed.get("buttons", [])
+            correct_answer = parsed.get("correct_answer", False)
 
     except json.JSONDecodeError:
-        # Not JSON at all
-        answer_text = result['answer'].strip()
-        images_raw = []
-        type = "answer"
+        pass
 
-    # ✅ Extract only filenames from image URLs
-    cleaned_images = []
-    for image in images_raw:
-        if isinstance(image, dict) and "url" in image:
-            url_str = image["url"]
-        else:
-            url_str = str(image)
-
-        match = re.search(r'/([^/]+\.(?:jpg|jpeg|png|gif))$', url_str, re.IGNORECASE)
-        if match:
-            cleaned_images.append(match.group(1))
+    # 🖼️ Extract image filenames if any
+    # cleaned_images = []
+    # for image in images_raw:
+    #     if isinstance(image, dict) and "url" in image:
+    #         url_str = image["url"]
+    #     else:
+    #         url_str = str(image)
+    #     match = re.search(r'/([^/]+\.(?:jpg|jpeg|png|gif))$', url_str, re.IGNORECASE)
+    #     if match:
+    #         cleaned_images.append(match.group(1))
 
     return {
         "response": answer_text,
-        "images": cleaned_images,
-        "has_images": len(cleaned_images) > 0,
-        "type": type,
+        "buttons": buttons,
+        "correct_answer": correct_answer,
+        # "images": images_raw,
+        # "has_images": len(images_raw) > 0,
+        # "type": type,
     }
 
 
-# if __name__ == "__main__":
-#     uvicorn.run(app, host="0.0.0.0", port=8000)
+@tutor_router.get("/get-initial-response/{subject}")
+async def get_initial_response(subject: str):
+    if subject == "maths":
+        return {
+            "response": "<strong>I'm Trained with the below topics Please ask me about them.</strong>",
+            "data":[
+            {  "title": "Large Numbers Around Us"},
+            {  "title": "Arithmetic Expressions" },
+            {  "title": "A Peek Beyond the Point" },
+            {  "title": "Expressions using Letter-Numbers" },
+            {  "title": "Parallel and Intersecting Lines" },
+            {  "title": "Number Play" },
+            {  "title": "A Tale of Three Intersecting Lines" },
+            {  "title": "Working with Fractions" },
+            ]
+
+            }
+    if subject == "english":
+        return {
+            "response": "<strong>I'm Trained with the below topics Please ask me about them.</strong>",
+            "data":[
+  {
+    "unit": "Unit 1: Learning Together",
+    "chapters": [
+      { "title": "The Day the River Spoke", "page": 1 },
+      { "title": "Try Again", "page": 16 },
+      { "title": "Three Days to See", "page": 28 },
+    ],
+  },
+  {
+    "unit": "Unit 2: Wit and Humour",
+    "chapters": [
+      { "title": "Animals, Birds, and Dr. Dolittle", "page": 43 },
+      { "title": "A Funny Man", "page": 59 },
+      { "title": "Say the Right Thing", "page": 70 },
+    ],
+  },
+  {
+    "unit": "Unit 3: Dreams and Discoveries",
+    "chapters": [
+      { "title": "My Brother’s Great Invention", "page": 91 },
+      { "title": "Paper Boats", "page": 109 },
+      { "title": "118", "page": 118 }, 
+    ],
+  },
+  {
+    "unit": "Unit 4: Travel and Adventure",
+    "chapters": [
+      { "title": "The Tunnel", "page": 139 },
+      { "title": "Travel", "page": 157 },
+      { "title": "Conquering the Summit", "page": 166 },
+    ],
+  },
+  {
+    "unit": "Unit 5: Bravehearts",
+    "chapters": [
+      { "title": "A Homage to Our Brave Soldiers", "page": 179 },
+      { "title": "My Dear Soldiers", "page": 199 },
+      { "title": "Rani Abbakka", "page": 206 },
+    ],
+  }
+            ]
+        }
