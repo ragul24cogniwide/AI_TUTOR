@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.tutor_assistant.controller import tutor_router
+from app.assignment_assistant.controller import assign_route
 import uvicorn
 from app.tutor_assistant.model import TutorAssistant
 from fastapi.staticfiles import StaticFiles
@@ -20,14 +21,20 @@ app.add_middleware(
 
 import os
 os.makedirs("app/tutor_assistant/output/images", exist_ok=True)
+os.makedirs("app/assignment_assistant/pdf_images", exist_ok=True)
 
 app.mount(
     "/app/tutor_assistant/output/images",
     StaticFiles(directory="app/tutor_assistant/output/images"),
     name="images"
 )
-
+app.mount(
+    "/app/assignment_assistant/pdf_images",
+    StaticFiles(directory="app/assignment_assistant/pdf_images"),
+    name="pdf_images"
+)
 app.include_router(tutor_router)
+app.include_router(assign_route)
 
 # tutor_assistant = TutorAssistant()
 # tutor_assistant.load_file()

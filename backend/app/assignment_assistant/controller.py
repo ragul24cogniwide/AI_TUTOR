@@ -1,36 +1,28 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import  UploadFile, File, Form,APIRouter
 from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
+
 import os, io, base64, uuid
 from pdf2image import convert_from_path
 from PIL import Image
 import pytesseract
-from docx import Document
-from model import get_client, get_deployment_name
-from prompts import get_supervision_prompt
+from .model import get_client
+from .prompts import get_supervision_prompt
 
-app = FastAPI(title="Handwritten Assignment Interactive Assistant")
 
-origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+TEMP_FOLDER = os.path.join(os.path.dirname(__file__), "pdf_images")
 
-TEMP_FOLDER = "temp_images"
-os.makedirs(TEMP_FOLDER, exist_ok=True)
 
 # In-memory session storage
 chat_sessions = {}  # { session_id: [messages] }
 
 client = get_client()
-DEPLOYMENT_NAME = get_deployment_name()
+DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+assign_route = APIRouter(
+    prefix="/assignment",
+    tags=["assignment"]
+)
 
-
-@app.post("/start-session/")
+@assign_route.post("/start-session")
 async def start_session(file: UploadFile = File(...)):
     """
     Upload handwritten PDF → start chat session → return first AI question.
@@ -48,6 +40,8 @@ async def start_session(file: UploadFile = File(...)):
         if filename.endswith(".pdf"):
            
             pages = convert_from_path(file_path, dpi=300)
+            print("Pages:", len(pages))
+            print(pytesseract.image_to_string(pages[0]))
             for i, page in enumerate(pages):
                 img_path = os.path.join(TEMP_FOLDER, f"{os.path.splitext(filename)[0]}_page_{i+1}.png")
                 page.save(img_path, "PNG")
@@ -75,6 +69,8 @@ async def start_session(file: UploadFile = File(...)):
 
         combined_text = "\n\n".join(ocr_texts)
         safe_prompt = get_supervision_prompt(combined_text)
+        print("ocr")
+        
 
         # Initialize session
         session_id = str(uuid.uuid4())
@@ -99,7 +95,6 @@ async def start_session(file: UploadFile = File(...)):
             messages=session_messages,
             max_tokens=800
         )
-
         ai_reply = response.choices[0].message.content
         chat_sessions[session_id].append({"role": "assistant", "content": ai_reply})
 
@@ -107,14 +102,14 @@ async def start_session(file: UploadFile = File(...)):
             "status": "success",
             "session_id": session_id,
             "pages_processed": pages_processed,
-            "first_ai_message": ai_reply
+            "ai_message": ai_reply
         })
 
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 
-@app.post("/send-message/")
+@assign_route.post("/send-message")
 async def send_message(session_id: str = Form(...), student_message: str = Form(...)):
     """
     Send student's reply → get next AI message → maintain session.
@@ -146,8 +141,7 @@ async def send_message(session_id: str = Form(...), student_message: str = Form(
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
-
-@app.get("/session-history/")
+@assign_route.get("/session-history/")
 async def session_history(session_id: str):
     """
     Retrieve full chat history for a session.
@@ -159,5 +153,3 @@ async def session_history(session_id: str):
         "status": "success",
         "history": chat_sessions[session_id]
     })
-
-

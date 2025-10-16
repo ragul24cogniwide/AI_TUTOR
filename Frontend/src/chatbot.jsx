@@ -7,97 +7,123 @@ export default function ChatBot() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [subject, setSubject] = useState('english');
-  const [chapter, setChapter] = useState([]);
   const messagesEndRef = useRef(null);
-  const [showChapters, setShowChapters] = useState(true);
+  const [file, setFile] = useState(null);
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
 
-
-
-  useEffect(()=>{
-    sendMessage('clear')
-    initialMessage(subject)
-  },[subject]);
-
-  const API_URL = 'https://schooldigitalised.cogniwide.com:6443/api/sd/tutor/ask';
-
-
-
-  const initialMessage = async (subject) => {
-    const response = await fetch(`http://127.0.0.1:8000/tutor/get-initial-response/${subject}`);
-    const data = await response.json();
-    setMessages(prev => [...prev, { role: 'assistant', content: data?.response}]);
-    console.log(data?.data);
-    setChapter(data?.data);
-
-  }
-
-  // Generate or retrieve session_id
-  const [sessionId] = useState(() => {
-    let existing = typeof window !== 'undefined' ? Math.random().toString(36).substr(2, 9) : 'demo';
-    return existing;
-  });
-
+  const API_URL = 'http://127.0.0.1:8000/tutor/ask';
   // Scroll to bottom
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => { scrollToBottom(); }, [messages]);
+   useEffect(()=>{
+    sendMessage('clear')
+  },[subject]);
 
   // Send message to backend
   const sendMessage = async (text) => {
-  const messageText = (typeof text === 'string' && text.trim()) ? text.trim() : input.trim();
-  if (!messageText || isLoading) return;
-
-  // Hide chapters if user clicked
-  setShowChapters(false);
-
-  setMessages(prev => [...prev, { role: 'user', content: messageText, images: [] }]);
-  setInput('');
-  setIsLoading(true);
-
-  try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, question: messageText, subject: subject }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(errText || 'Network error');
+    const messageText = (typeof text === 'string' && text.trim()) ? text.trim() : input.trim();
+    if (!messageText || isLoading) return;
+    if (!sessionId) {
+      
+      return;
     }
 
-    const data = await res.json();
+    setMessages(prev => [...prev, { role: 'user', content: messageText, images: [] }]);
+    setInput('');
+    setIsLoading(true);
 
-    const images = Array.isArray(data.images) ? data.images : [];
-    setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: data.response.replace(/<\/?strong>/g, '')
-        .replace(
-          /<hint>\s*(.*?)\s*<\/hint>/gs,
-          `<div style="background-color:#e6f3ff; padding:8px; border-radius:8px; font-style: italic;">$1</div>`
-        ),
-      images: images,
-      type: data.type,
-    }]);
+    try {
+      const res = await fetch("http://127.0.0.1:8000/assignment/send-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          session_id: sessionId,
+          student_message: messageText
+        })
+      });
 
-    if (data.type === 'cleared') {
-      setMessages([{ role: 'assistant', content: starter, images: [] }]);
-      setShowChapters(true); // reset for new session
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || 'Network error');
+      }
+
+      const data = await res.json();
+
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: data.ai_message, images: [] }
+      ]);
+
+    } catch (err) {
+      console.error('Send error', err);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'Oops — could not reach the server. Try again.',
+        images: []
+      }]);
+    } finally {
+      setIsLoading(false);
     }
-  } catch (err) {
-    console.error('Send error', err);
-    setMessages(prev => [...prev, { role: 'assistant', content: 'Oops — could not reach the server. Try again.', images: [] }]);
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
+  // ✅ Handle file upload and AI initial question
+  const handleUpload = async () => {
+    if (!file) {
+      alert("Please select a file first.");
+      return;
+    }
 
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const startRes = await fetch("http://127.0.0.1:8000/assignment/start-session", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!startRes.ok) throw new Error("Failed to start session");
+      const startData = await startRes.json();
+      console.log("✅ Session started:", startData);
+
+      // ✅ Store backend session_id globally for future messages
+      setSessionId(startData.session_id);
+
+      // ✅ Show first AI message (based on uploaded content)
+      if (startData.ai_message) {
+        setMessages(prev => [
+          ...prev,
+          { role: "user", content: `📤 Uploaded: ${file.name} succesfully`, images: []  },
+          { role: "assistant", content: startData.ai_message, images: [] }
+        ]);
+      } else {
+        setMessages(prev => [
+          ...prev,
+          { role: "assistant", content: "⚠️ No response received from AI. Please try again.", images: [] }
+        ]);
+      }
+
+    } catch (error) {
+      console.error("❌ Upload failed:", error);
+      setMessages(prev => [
+        ...prev,
+        { role: "assistant", content: "❌ Upload failed. Please check your file and try again.", images: [] }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (input.trim()) sendMessage();
     }
   };
+  
 
   return (
     <div className="h-screen w-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex flex-col overflow-hidden">
@@ -118,6 +144,38 @@ export default function ChatBot() {
               </h2>
               <p className="text-sm text-white/90 font-light">Your personal learning assistant</p>
             </div>
+
+            <div>
+  {/* Hidden file input */}
+  <input
+    type="file"
+    id="fileInput"
+    accept=".pdf,.docx,.jpg,.png"
+    style={{ display: "none" }}
+    onChange={(e) => setFile(e.target.files[0])}
+  />
+
+  {/* Upload button */}
+  <button
+    onClick={() => document.getElementById("fileInput").click()}
+    className="px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white border-2 border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 transition-all duration-300 shadow-lg hover:bg-white/30 text-sm font-medium cursor-pointer"
+  >
+    📎 Choose File
+  </button>
+
+  {/* Show file name if selected */}
+  
+
+  {/* Upload trigger button */}
+  <button
+    onClick={handleUpload}
+    disabled={loading || !file}
+    className="ml-3 px-4 py-2 rounded-full bg-green-500 hover:bg-green-600 text-white border-2 border-white/30 transition-all duration-300 shadow-lg text-sm font-medium cursor-pointer disabled:opacity-50"
+  >
+    {loading ? "Uploading..." : "📤 Upload"}
+  </button>
+</div>
+
           </div>
           
           {/* Subject Dropdown in Header */}
@@ -131,12 +189,20 @@ export default function ChatBot() {
               <option value="english" className="bg-purple-600 text-white">📚 English</option>
               <option value="maths" className="bg-purple-600 text-white">🔢 Mathematics</option>
             </select>
-                      <button onClick={()=>sendMessage('clear')} className="px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white border-2 border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 transition-all duration-300 shadow-lg hover:bg-white/30 text-sm font-medium cursor-pointer">clear</button>
-
+                       <button
+              onClick={() => {
+                setMessages([{ role: 'assistant', content: starter, images: [] }]);
+                setSessionId(null);
+              }}
+              className="px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white border-2 border-white/30 text-sm font-medium"
+            >
+              Clear
+            </button>
           </div>
-
         </div>
       </div>
+
+      
 
       {/* Messages Container */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -230,48 +296,6 @@ export default function ChatBot() {
           </div>
         ))}
 
-      <div className="max-w-4xl mx-auto space-y-6">
-  {showChapters && Array.isArray(chapter) && (
-    <>
-      {/* Case 1: Check if it's a flat list (maths chapters) */}
-      {chapter.every(item => 'title' in item && !('chapters' in item)) ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {chapter.map((item, idx) => (
-            <button 
-              key={idx}
-              onClick={() => sendMessage(item.title)}
-              className="px-4 py-2 bg-purple-200 text-purple-800 rounded-full hover:bg-purple-300 transition-colors"
-            >
-              {item.title}
-            </button>
-          ))}
-        </div>
-      ) : (
-        // Case 2: English-style grouped by unit
-        chapter.map((unit, unitIdx) => (
-          <div key={unitIdx}>
-            <h3 className="text-lg font-semibold text-gray-700 mb-2">{unit.unit}</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {unit.chapters.map((item, idx) => (
-                <button 
-                  key={idx}
-                  onClick={() => sendMessage(item.title)}
-                  className="px-4 py-2 bg-purple-200 text-purple-800 rounded-full hover:bg-purple-300 transition-colors"
-                >
-                  {item.title}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))
-      )}
-    </>
-  )}
-</div>
-
-
-
-
         {/* Loading indicator with enhanced animation */}
         {isLoading && (
           <div className="flex gap-3 items-start animate-slideIn">
@@ -293,8 +317,7 @@ export default function ChatBot() {
 
         <div ref={messagesEndRef} />
       </div>
-  
-     
+
       {/* Enhanced Input Area */}
       <div className="relative p-4 bg-white/80 backdrop-blur-xl border-t border-purple-100 shadow-2xl">
         <div className="absolute inset-0 bg-gradient-to-r from-purple-50 to-pink-50 opacity-50"></div>
@@ -321,6 +344,7 @@ export default function ChatBot() {
           </button>
         </div>
       </div>
+      
 
       {/* Enhanced Animations */}
       <style>{`
@@ -364,4 +388,4 @@ export default function ChatBot() {
       `}</style>
     </div>
   );
-}
+  }

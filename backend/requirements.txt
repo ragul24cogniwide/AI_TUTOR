@@ -16,17 +16,16 @@ torch
 # openai>=1.27.0
 
 # Environment variable management (optional but recommended)
-python-dotenv
+
 
 fastapi==0.104.0
 uvicorn[standard]==0.24.0
 
 langchain-groq
-
-
 openai>=1.6.0
 python-dotenv
 pdf2image
 pytesseract
 Pillow
-
+python-multipart
+python-docx
