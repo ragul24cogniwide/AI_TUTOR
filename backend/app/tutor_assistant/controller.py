@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Dict
 from langchain_core.messages import HumanMessage, AIMessage
-from app.tutor_assistant.model import RetrivalChain
+from app.tutor_assistant.model import RetrievalChain
 import json, re
 
 # Create the router
@@ -18,7 +18,7 @@ class QueryRequest(BaseModel):
     subject: str
 
 # 🧠 Session memory map — stores one RetrivalChain per user session
-tutor_sessions: Dict[str, RetrivalChain] = {}
+tutor_sessions: Dict[str, RetrievalChain] = {}
 
 @tutor_router.post("/ask")
 async def ask_question(request: QueryRequest):
@@ -26,73 +26,44 @@ async def ask_question(request: QueryRequest):
     question = request.question.strip()
 
     if not question:
-        return {
-            "response": "Please ask a valid question.",
-            "images": [],
-            "has_images": False,
-            "type": "invalid",
-        }
+        return {"response": "Please ask a valid question.", "buttons": [], "correct_answer": False, "hint": "", "type": "invalid"}
 
-    # 🔄 "clear" command resets session memory
     if question.lower() == "clear":
         if session_id in tutor_sessions:
             del tutor_sessions[session_id]
-        return {
-            "response": "✅ Memory cleared for this session.",
-            "images": [],
-            "has_images": False,
-            "type": "cleared",
-        }
+        return {"response": "✅ Memory cleared for this session.", "buttons": [], "correct_answer": False, "hint": "", "type": "cleared"}
 
-    # 🧩 Get or create a retrieval chain with memory for this session
+    # Create or reuse retrieval chain
     if session_id not in tutor_sessions:
-        retriever = RetrivalChain(request.subject)
+        retriever = RetrievalChain(request.subject)
         retriever.get_documents()
         tutor_sessions[session_id] = retriever
     else:
         retriever = tutor_sessions[session_id]
 
-    # 🧠 Ask the question (uses ConversationalRetrievalChain + memory)
-    result = await retriever.chat(question)
-    answer_text = result.strip()
-    images_raw = []
-    type = "answer"
-    buttons = []
-    correct_answer = False
+    # Ask the question
+    result_raw = await retriever.chat(question)
+    print("raw data :", result_raw)
 
-    # Handle JSON structured responses (if your model returns JSON)
+    # Step 1: Remove the markdown block ```json ... ```
+    cleaned_json_str = re.sub(r'```json\s*([\s\S]*?)\s*```', r'\1', result_raw)
+
     try:
-        parsed = json.loads(answer_text)
-        print("parsed",parsed)
-        if isinstance(parsed, dict):
-            answer_text = parsed.get("answer", "").strip()
-            images_raw = parsed.get("images", [])
-            type = parsed.get("type", "answer")
-            buttons = parsed.get("buttons", [])
-            correct_answer = parsed.get("correct_answer", False)
-
+        result = json.loads(cleaned_json_str)
     except json.JSONDecodeError:
-        pass
+        result = {}  # fallback if JSON is invalid
 
-    # 🖼️ Extract image filenames if any
-    # cleaned_images = []
-    # for image in images_raw:
-    #     if isinstance(image, dict) and "url" in image:
-    #         url_str = image["url"]
-    #     else:
-    #         url_str = str(image)
-    #     match = re.search(r'/([^/]+\.(?:jpg|jpeg|png|gif))$', url_str, re.IGNORECASE)
-    #     if match:
-    #         cleaned_images.append(match.group(1))
-
-    return {
-        "response": answer_text,
-        "buttons": buttons,
-        "correct_answer": correct_answer,
-        # "images": images_raw,
-        # "has_images": len(images_raw) > 0,
-        # "type": type,
-    }
+    parsed_result = {}
+    if isinstance(result, dict):
+        # Step 2: Extract the parsed values
+        parsed_result = {
+            "response": result.get("answer", "").strip(),
+            "correct_answer": result.get("correct_answer", False),
+            "quick_replies": result.get("quick_replies", []),
+        }
+        return parsed_result
+    else:
+        return result_raw
 
 
 @tutor_router.get("/get-initial-response/{subject}")
@@ -100,61 +71,179 @@ async def get_initial_response(subject: str):
     if subject == "maths":
         return {
             "response": "<strong>I'm Trained with the below topics Please ask me about them.</strong>",
-            "data":[
-            {  "title": "Large Numbers Around Us"},
-            {  "title": "Arithmetic Expressions" },
-            {  "title": "A Peek Beyond the Point" },
-            {  "title": "Expressions using Letter-Numbers" },
-            {  "title": "Parallel and Intersecting Lines" },
-            {  "title": "Number Play" },
-            {  "title": "A Tale of Three Intersecting Lines" },
-            {  "title": "Working with Fractions" },
-            ]
-
-            }
+            "data":[   
+            {"title":"Large Numbers and their properties (Exact and Approximate Values)"},
+            {"title":"Arithmetic Expressions and Algebra using Letter Numbers (Simplification, Formulas, Patterns)"},
+            {"title":"Decimal Numbers (Place Value, Notation, Units of Measurement, Operations)"},
+            {"title":"Advanced Operations with Fractions (Multiplication, Division, Area connection)"},
+            {"title":"Geometry: Properties of Parallel and Intersecting Lines (Transversals, Angles)"},
+            {"title":"Geometry: Construction and Properties of Triangles (Angle Sum, Exterior Angles, Altitudes)"},
+            {"title":"Number Play (Sequences like Virahānka Fibonacci Numbers, Magic Squares)"}
+         ]
+        }
     if subject == "english":
         return {
             "response": "<strong>I'm Trained with the below topics Please ask me about them.</strong>",
             "data":[
   {
-    "unit": "Unit 1: Learning Together",
-    "chapters": [
-      { "title": "The Day the River Spoke", "page": 1 },
-      { "title": "Try Again", "page": 16 },
-      { "title": "Three Days to See", "page": 28 },
-    ],
+    "Unit_No": "1",
+    "Unit_Name": "Learning Together",
+    "Lesson_Name": "The Day the River Spoke",
+    "Grammar_Topics": [
+      "Sentence Completion",
+      "Onomatopoeia",
+      "Fill in the blanks",
+      "Preposition"
+    ]
   },
   {
-    "unit": "Unit 2: Wit and Humour",
-    "chapters": [
-      { "title": "Animals, Birds, and Dr. Dolittle", "page": 43 },
-      { "title": "A Funny Man", "page": 59 },
-      { "title": "Say the Right Thing", "page": 70 },
-    ],
+    "Unit_No": "1",
+    "Unit_Name": "Learning Together",
+    "Lesson_Name": "Try Again",
+    "Grammar_Topics": [
+      "Phrases",
+      "Metaphor and Simile"
+    ]
   },
   {
-    "unit": "Unit 3: Dreams and Discoveries",
-    "chapters": [
-      { "title": "My Brother’s Great Invention", "page": 91 },
-      { "title": "Paper Boats", "page": 109 },
-      { "title": "118", "page": 118 }, 
-    ],
+    "Unit_No": "1",
+    "Unit_Name": "Learning Together",
+    "Lesson_Name": "Three Days to See",
+    "Grammar_Topics": [
+      "Modal Verbs",
+      "Descriptive Paragraph"
+    ]
   },
   {
-    "unit": "Unit 4: Travel and Adventure",
-    "chapters": [
-      { "title": "The Tunnel", "page": 139 },
-      { "title": "Travel", "page": 157 },
-      { "title": "Conquering the Summit", "page": 166 },
-    ],
+    "Unit_No": "2",
+    "Unit_Name": "Wit and Humour",
+    "Lesson_Name": "Animals, Birds, and Dr. Dolittle",
+    "Grammar_Topics": [
+      "Compound Words",
+      "Palindrome",
+      "Verbs (Present Perfect Tense)",
+      "Notice Writing"
+    ]
   },
   {
-    "unit": "Unit 5: Bravehearts",
-    "chapters": [
-      { "title": "A Homage to Our Brave Soldiers", "page": 179 },
-      { "title": "My Dear Soldiers", "page": 199 },
-      { "title": "Rani Abbakka", "page": 206 },
-    ],
+    "Unit_No": "2",
+    "Unit_Name": "Wit and Humour",
+    "Lesson_Name": "A Funny Man",
+    "Grammar_Topics": [
+      "Phrasal Verbs",
+      "Adverbs and Prepositions"
+    ]
+  },
+  {
+    "Unit_No": "2",
+    "Unit_Name": "Wit and Humour",
+    "Lesson_Name": "Say the Right Thing",
+    "Grammar_Topics": [
+      "Suffix",
+      "Verb Forms",
+      "Tense (Present Continuous/Present Perfect Continuous)",
+      "Kinds of Sentences"
+    ]
+  },
+  {
+    "Unit_No": "3",
+    "Unit_Name": "Dreams & Discoveries",
+    "Lesson_Name": "My Brother's Great Invention",
+    "Grammar_Topics": [
+      "Onomatopoeia",
+      "Binomials (Conjunction)",
+      "Phrasal Verb",
+      "Idioms",
+      "Verbs (Simple Past & Past Perfect)"
+    ]
+  },
+  {
+    "Unit_No": "3",
+    "Unit_Name": "Dreams & Discoveries",
+    "Lesson_Name": "Paper Boats",
+    "Grammar_Topics": [
+      "Opposites (Antonyms)",
+      "Diary Entry"
+    ]
+  },
+  {
+    "Unit_No": "3",
+    "Unit_Name": "Dreams & Discoveries",
+    "Lesson_Name": "North, South, East, West",
+    "Grammar_Topics": [
+      "Associate Words with Meanings",
+      "Subject-Verb Agreement",
+      "Letter (Leave Application)"
+    ]
+  },
+  {
+    "Unit_No": "4",
+    "Unit_Name": "Travel and Adventure",
+    "Lesson_Name": "The Tunnel",
+    "Grammar_Topics": [
+      "Phrases",
+      "Onomatopoeia",
+      "Punctuation",
+      "Descriptive Paragraph Writing"
+    ]
+  },
+  {
+    "Unit_No": "4",
+    "Unit_Name": "Travel and Adventure",
+    "Lesson_Name": "Travel",
+    "Grammar_Topics": [
+      "Onomatopoeia"
+    ]
+  },
+  {
+    "Unit_No": "4",
+    "Unit_Name": "Travel and Adventure",
+    "Lesson_Name": "Conquering the Summit",
+    "Grammar_Topics": [
+      "Phrases",
+      "Correct Parts of Speech",
+      "Article",
+      "Formal Letter"
+    ]
+  },
+  {
+    "Unit_No": "5",
+    "Unit_Name": "Bravehearts",
+    "Lesson_Name": "A Homage to Our Brave Soldiers",
+    "Grammar_Topics": [
+      "Prefix and Root Words",
+      "Main Clause",
+      "Subordinate Clause",
+      "Subordinating Conjunctions",
+      "Collocations"
+    ]
+  },
+  {
+    "Unit_No": "5",
+    "Unit_Name": "Bravehearts",
+    "Lesson_Name": "My Dear Soldiers",
+    "Grammar_Topics": [
+      "Fill in the blanks (Spelling)",
+      "Speech (Direct & Indirect Speech)"
+    ]
   }
-            ]
+]
         }
+    
+
+class TopicFinder(BaseModel):
+    subject: str
+    query: str
+
+
+@tutor_router.post("/get-important-topics")
+async def get_response_template(topic_finder: TopicFinder):
+    print(topic_finder.query)
+    print(topic_finder.subject)
+    retriever= RetrievalChain(topic_finder.subject)
+    retriever.get_documents()
+    result = retriever.get_important_topics(topic_finder.query)
+    return [doc.page_content for doc in result]
+
+
+
