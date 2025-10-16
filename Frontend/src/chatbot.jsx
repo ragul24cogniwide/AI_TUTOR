@@ -18,12 +18,11 @@ export default function ChatBot() {
     initialMessage(subject)
   },[subject]);
 
-  const API_URL = 'https://schooldigitalised.cogniwide.com:6443/api/sd/tutor/ask';
-
+  const API_URL = 'https://schooldigitalised.cogniwide.com/api/sd/tutor/ask';
 
 
   const initialMessage = async (subject) => {
-    const response = await fetch(`https://schooldigitalised.cogniwide.com:6443/api/sd/tutor/get-initial-response/${subject}`);
+    const response = await fetch(`https://schooldigitalised.cogniwide.com/api/sd/tutor/get-initial-response/${subject}`);
     const data = await response.json();
     setMessages(prev => [...prev, { role: 'assistant', content: data?.response}]);
     console.log(data?.data);
