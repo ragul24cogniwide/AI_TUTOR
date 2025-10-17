@@ -111,7 +111,7 @@ export default function ChatBot() {
         .replace(
           /<hint>\s*(.*?)\s*<\/hint>/gs,
           `<div style="background-color:#e6f3ff; padding:8px; border-radius:8px; font-style: italic;">$1</div>`
-        ).replace(/\*\*(.*?)\*\*/g, '<b>$1</b>'),
+        ).replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')),
 
       images: images,
       type: data.correct_answer,
