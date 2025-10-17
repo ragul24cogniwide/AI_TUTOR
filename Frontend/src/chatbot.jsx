@@ -16,7 +16,7 @@ export default function ChatBot() {
     initialMessage(subject)
   },[subject]);
 
-  const API_URL = 'http://localhost:8100/tutor/ask';
+  const API_URL = 'https://schooldigitalised.cogniwide.com/api/sd/tutor/ask';
 
   const initialMessage = async (subject) => {
     const response = await fetch(`https://schooldigitalised.cogniwide.com/api/sd/tutor/get-initial-response/${subject}`);
@@ -111,7 +111,8 @@ export default function ChatBot() {
         .replace(
           /<hint>\s*(.*?)\s*<\/hint>/gs,
           `<div style="background-color:#e6f3ff; padding:8px; border-radius:8px; font-style: italic;">$1</div>`
-        ).replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')),
+        ).replace(/\*\*(.*?)\*\*/g, '<b>$1</b>'),
+
       images: images,
       type: data.correct_answer,
       quick_replies: Array.isArray(data.quick_replies) ? data.quick_replies : []
@@ -230,7 +231,9 @@ export default function ChatBot() {
                           ? 'bg-gradient-to-r from-yellow-400 to-orange-400 text-white shadow-md'
                           : 'bg-purple-100 text-purple-700'
                     }`}>
+
                       {msg.type === true ? '🎓 ' + 'success' : ''}
+
                     </div>
                   )}
 
