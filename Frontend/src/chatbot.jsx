@@ -18,7 +18,6 @@ export default function ChatBot() {
 
   const API_URL = 'https://schooldigitalised.cogniwide.com/api/sd/tutor/ask';
 
-
   const initialMessage = async (subject) => {
     const response = await fetch(`https://schooldigitalised.cogniwide.com/api/sd/tutor/get-initial-response/${subject}`);
     const data = await response.json();
@@ -58,6 +57,24 @@ export default function ChatBot() {
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => { scrollToBottom(); }, [messages]);
 
+  function convertFractionsToMathML(htmlString) {
+  htmlString = htmlString.replace(/(\d+)\s*\/\s*(\d+)/g, (_, num, den) => {
+    return `<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+              <mfrac><mn>${num}</mn><mn>${den}</mn></mfrac>
+            </math>`;
+  });
+
+  // Convert division expressions like "4 ÷ 4 = 1"
+  htmlString = htmlString.replace(/(\d+)\s*÷\s*(\d+)\s*=\s*(\d+)/g, (_, a, b, result) => {
+    return `<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+              <mn>${a}</mn><mo>÷</mo><mn>${b}</mn><mo>=</mo><mn>${result}</mn>
+            </math>`;
+  });
+
+  return htmlString;
+}
+
+
   // Send message to backend
   const sendMessage = async (text) => {
   const messageText = (typeof text === 'string' && text.trim()) ? text.trim() : input.trim();
@@ -90,11 +107,12 @@ export default function ChatBot() {
     const images = Array.isArray(data.images) ? data.images : [];
     setMessages(prev => [...prev, {
       role: 'assistant',
-      content: data.response.replace(/<\/?strong>/g, '')
+      content: convertFractionsToMathML(data.response.replace(/<\/?strong>/g, '')
         .replace(
           /<hint>\s*(.*?)\s*<\/hint>/gs,
           `<div style="background-color:#e6f3ff; padding:8px; border-radius:8px; font-style: italic;">$1</div>`
         ).replace(/\*\*(.*?)\*\*/g, '<b>$1</b>'),
+
       images: images,
       type: data.correct_answer,
       quick_replies: Array.isArray(data.quick_replies) ? data.quick_replies : []
@@ -152,8 +170,8 @@ export default function ChatBot() {
               onChange={(e) => setSubject(e.target.value)}
               className="px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white border-2 border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 transition-all duration-300 shadow-lg hover:bg-white/30 text-sm font-medium cursor-pointer"
             >
-              <option value="english" className="bg-purple-600 text-white">📚 English</option>
-              <option value="maths" className="bg-purple-600 text-white">🔢 Mathematics</option>
+              <option value="english" className="bg-purple-600 text-white">English</option>
+              <option value="maths" className="bg-purple-600 text-white">Mathematics</option>
             </select>
                       <button onClick={()=>sendMessage('clear')} className="px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white border-2 border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 transition-all duration-300 shadow-lg hover:bg-white/30 text-sm font-medium cursor-pointer">clear</button>
 
@@ -213,7 +231,9 @@ export default function ChatBot() {
                           ? 'bg-gradient-to-r from-yellow-400 to-orange-400 text-white shadow-md'
                           : 'bg-purple-100 text-purple-700'
                     }`}>
-                      {msg.type === true ? '🎓 ' + msg.type : ''}
+
+                      {msg.type === true ? '🎓 ' + 'success' : ''}
+
                     </div>
                   )}
 

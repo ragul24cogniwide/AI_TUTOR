@@ -390,6 +390,7 @@ def get_system_prompt_maths():
         "answer": "[Your response in html format]",
         "correct_answer": true/false, make it true only user answers correctly then reset it for follow up question.
         "quick_replies": [Example: 'I understand', 'I don\'t know','Explain it more','Give me an example','Hinglish mein samjha dijiye'] max it should be 6.
+
       }}
       ```
       
