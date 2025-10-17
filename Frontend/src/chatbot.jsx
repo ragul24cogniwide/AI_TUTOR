@@ -19,7 +19,7 @@ export default function ChatBot() {
   const API_URL = 'http://localhost:8100/tutor/ask';
 
   const initialMessage = async (subject) => {
-    const response = await fetch(`http://localhost:8100/tutor/get-initial-response/${subject}`);
+    const response = await fetch(`https://schooldigitalised.cogniwide.com/api/sd/tutor/get-initial-response/${subject}`);
     const data = await response.json();
     setMessages(prev => [...prev, { role: 'assistant', content: data?.response}]);
     console.log(data?.data);
