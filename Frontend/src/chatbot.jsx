@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, use } from 'react';
 import { Send, User, Image, Sparkles } from 'lucide-react';
 
 export default function ChatBot() {
@@ -7,34 +7,136 @@ export default function ChatBot() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [subject, setSubject] = useState('english');
+  const [chapter, setChapter] = useState([]);
   const messagesEndRef = useRef(null);
+  const [showChapters, setShowChapters] = useState(true);
   const [file, setFile] = useState(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sessionId, setSessionId] = useState(null);
+  const [ setSessionId] = useState(null);
 
-  const API_URL = 'http://127.0.0.1:8000/tutor/ask';
+  useEffect(()=>{
+    sendMessage('clear')
+    initialMessage(subject)
+  },[subject]);
+
+  useEffect(()=>{
+    sendmessages('clear')
+  },[])
+
+  const API_URL = 'https://schooldigitalised.cogniwide.com/api/sd/tutor/ask';
+
+
+  const initialMessage = async (subject) => {
+    const response = await fetch(`https://schooldigitalised.cogniwide.com/api/sd/tutor/get-initial-response/${subject}`);
+    const data = await response.json();
+    setMessages(prev => [...prev, { role: 'assistant', content: data?.response}]);
+    console.log(data?.data);
+   if (subject === 'english' && Array.isArray(data?.data)) {
+  const grouped = Object.values(
+    data.data.reduce((acc, item) => {
+      if (!acc[item.Unit_Name]) {
+        acc[item.Unit_Name] = {
+          unit: item.Unit_Name,
+          chapters: [],
+        };
+      }
+      acc[item.Unit_Name].chapters.push({
+        title: item.Lesson_Name,
+        grammarTopics: item.Grammar_Topics || [],
+      });
+      return acc;
+    }, {})
+  );
+  setChapter(grouped);
+} else {
+  setChapter(data?.data || []);
+}
+
+
+  }
+
+  // Generate or retrieve session_id
+  const [sessionId] = useState(() => {
+    let existing = typeof window !== 'undefined' ? Math.random().toString(36).substr(2, 9) : 'demo';
+    return existing;
+  });
+
   // Scroll to bottom
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => { scrollToBottom(); }, [messages]);
-   useEffect(()=>{
-    sendMessage('clear')
-  },[subject]);
 
   // Send message to backend
   const sendMessage = async (text) => {
-    const messageText = (typeof text === 'string' && text.trim()) ? text.trim() : input.trim();
-    if (!messageText || isLoading) return;
-    if (!sessionId) {
-      
-      return;
+  const messageText = (typeof text === 'string' && text.trim()) ? text.trim() : input.trim();
+  if (!messageText || isLoading) return;
+
+  // Hide chapters if user clicked
+  setShowChapters(false);
+  setMessages(prev => 
+    prev.map(msg => msg.role === 'assistant' ? { ...msg, quick_replies: [] } : msg)
+  );
+  setMessages(prev => [...prev, { role: 'user', content: messageText, images: [] }]);
+  setInput('');
+  setIsLoading(true);
+
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, question: messageText, subject: subject }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(errText || 'Network error');
     }
 
-    setMessages(prev => [...prev, { role: 'user', content: messageText, images: [] }]);
-    setInput('');
-    setIsLoading(true);
+    const data = await res.json();
+    console.log(data);
 
-    try {
+    const images = Array.isArray(data.images) ? data.images : [];
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: data.response.replace(/<\/?strong>/g, '')
+        .replace(
+          /<hint>\s*(.*?)\s*<\/hint>/gs,
+          `<div style="background-color:#e6f3ff; padding:8px; border-radius:8px; font-style: italic;">$1</div>`
+        ).replace(/\*\*(.*?)\*\*/g, '<b>$1</b>'),
+      images: images,
+      type: data.correct_answer,
+      quick_replies: Array.isArray(data.quick_replies) ? data.quick_replies : []
+    }]);
+
+
+    console.log(data.type);
+
+    if (data.type === 'cleared') {
+      setMessages([{ role: 'assistant', content: starter, images: [] }]);
+      setShowChapters(true); // reset for new session
+    }
+  } catch (err) {
+    console.error('Send error', err);
+    setMessages(prev => [...prev, { role: 'assistant', content: 'Oops — could not reach the server. Try again.', images: [] }]);
+  } finally {
+    setIsLoading(false);
+  }
+
+};
+
+  const sendmessages = async (text) => {
+  const messageText = (typeof text === 'string' && text.trim()) ? text.trim() : input.trim();
+  if (!messageText || isLoading) return;
+
+  // Hide chapters if user clicked
+  setShowChapters(false);
+  setMessages(prev => 
+    prev.map(msg => msg.role === 'assistant' ? { ...msg, quick_replies: [] } : msg)
+  );
+  setMessages(prev => [...prev, { role: 'user', content: messageText, images: [] }]);
+  setInput('');
+  setIsLoading(true);
+      try {
       const res = await fetch("http://127.0.0.1:8000/assignment/send-message", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -43,19 +145,19 @@ export default function ChatBot() {
           student_message: messageText
         })
       });
-
+ 
       if (!res.ok) {
         const errText = await res.text();
         throw new Error(errText || 'Network error');
       }
-
+ 
       const data = await res.json();
-
+ 
       setMessages(prev => [
         ...prev,
         { role: 'assistant', content: data.ai_message, images: [] }
       ]);
-
+ 
     } catch (err) {
       console.error('Send error', err);
       setMessages(prev => [...prev, {
@@ -68,30 +170,30 @@ export default function ChatBot() {
     }
   };
 
-  // ✅ Handle file upload and AI initial question
+// ✅ Handle file upload and AI initial question
   const handleUpload = async () => {
     if (!file) {
       alert("Please select a file first.");
       return;
     }
-
+ 
     setLoading(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
-
+ 
       const startRes = await fetch("http://127.0.0.1:8000/assignment/start-session", {
         method: "POST",
         body: formData,
       });
-
+ 
       if (!startRes.ok) throw new Error("Failed to start session");
       const startData = await startRes.json();
       console.log("✅ Session started:", startData);
-
+ 
       // ✅ Store backend session_id globally for future messages
       setSessionId(startData.session_id);
-
+ 
       // ✅ Show first AI message (based on uploaded content)
       if (startData.ai_message) {
         setMessages(prev => [
@@ -105,7 +207,7 @@ export default function ChatBot() {
           { role: "assistant", content: "⚠️ No response received from AI. Please try again.", images: [] }
         ]);
       }
-
+ 
     } catch (error) {
       console.error("❌ Upload failed:", error);
       setMessages(prev => [
@@ -116,14 +218,14 @@ export default function ChatBot() {
       setLoading(false);
     }
   };
-  
+
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (input.trim()) sendMessage();
     }
   };
-  
 
   return (
     <div className="h-screen w-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex flex-col overflow-hidden">
@@ -144,8 +246,10 @@ export default function ChatBot() {
               </h2>
               <p className="text-sm text-white/90 font-light">Your personal learning assistant</p>
             </div>
+          </div>
 
-            <div>
+          {/* for uploading files */}
+          <div>
   {/* Hidden file input */}
   <input
     type="file"
@@ -154,7 +258,7 @@ export default function ChatBot() {
     style={{ display: "none" }}
     onChange={(e) => setFile(e.target.files[0])}
   />
-
+ 
   {/* Upload button */}
   <button
     onClick={() => document.getElementById("fileInput").click()}
@@ -162,10 +266,10 @@ export default function ChatBot() {
   >
     📎 Choose File
   </button>
-
+ 
   {/* Show file name if selected */}
   
-
+ 
   {/* Upload trigger button */}
   <button
     onClick={handleUpload}
@@ -175,8 +279,8 @@ export default function ChatBot() {
     {loading ? "Uploading..." : "📤 Upload"}
   </button>
 </div>
-
-          </div>
+ 
+ 
           
           {/* Subject Dropdown in Header */}
           <div className="flex items-center gap-2">
@@ -189,20 +293,12 @@ export default function ChatBot() {
               <option value="english" className="bg-purple-600 text-white">📚 English</option>
               <option value="maths" className="bg-purple-600 text-white">🔢 Mathematics</option>
             </select>
-                       <button
-              onClick={() => {
-                setMessages([{ role: 'assistant', content: starter, images: [] }]);
-                setSessionId(null);
-              }}
-              className="px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white border-2 border-white/30 text-sm font-medium"
-            >
-              Clear
-            </button>
+                      <button onClick={()=>sendMessage('clear')} className="px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white border-2 border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 transition-all duration-300 shadow-lg hover:bg-white/30 text-sm font-medium cursor-pointer">clear</button>
+
           </div>
+
         </div>
       </div>
-
-      
 
       {/* Messages Container */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -224,10 +320,10 @@ export default function ChatBot() {
               {/* Message Bubble with enhanced styling */}
               <div className={`relative group ${msg.role === 'user' ? 'ml-auto' : 'mr-auto'}`}>
                 {/* Glow effect on hover */}
-                <div className={`absolute inset-0 rounded-3xl blur-2xl opacity-0 group-hover:opacity-30 transition-opacity duration-300 ${msg.role === 'user' ? 'bg-blue-100' : msg.type === 'answer' ? 'bg-yellow-100' : 'bg-purple-100'}`}></div>
+                <div className={`absolute inset-0 rounded-3xl blur-2xl opacity-0 group-hover:opacity-30 transition-opacity duration-300 ${msg.role === 'user' ? 'bg-blue-100' : msg.type == true ? 'bg-yellow-100' : 'bg-purple-100'}`}></div>
                 
                 {/* Achievement style for answers */}
-                {msg.role === 'assistant' && msg.type === 'answer' && (
+                {msg.role === 'assistant' && msg.type == true && (
                   <>
                     <div className="absolute -top-2 -left-2 w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg animate-bounce-slow z-10">
                       <span className="text-2xl">🏆</span>
@@ -241,21 +337,21 @@ export default function ChatBot() {
                 <div className={`relative rounded-3xl px-6 py-4 shadow-lg backdrop-blur-lg transition-all duration-300 group-hover:shadow-2xl
                   ${msg.role === 'user'
                     ? 'bg-gradient-to-br from-blue-500 to-cyan-500 text-white border border-white/20'
-                    : msg.type === 'answer'
+                    : msg.type === true
                       ? 'bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50 text-gray-800 border-2 border-yellow-300 shadow-xl'
                       : 'bg-white/90 text-gray-800 border border-purple-100'
                   }`}
                 >
                   {/* Type label with badge style */}
-                  {msg.type === 'answer' && (
+                  {msg.type === true && (
                     <div className={`inline-block mb-2 px-3 py-1 rounded-full text-xs font-medium ${
                       msg.role === 'user' 
                         ? 'bg-white/20 text-white' 
-                        : msg.type === 'answer'
+                        : msg.type == true
                           ? 'bg-gradient-to-r from-yellow-400 to-orange-400 text-white shadow-md'
                           : 'bg-purple-100 text-purple-700'
                     }`}>
-                      {msg.type === 'answer' ? '🎓 ' + msg.type : ''}
+                      {msg.type === true ? '🎓 ' + msg.type : ''}
                     </div>
                   )}
 
@@ -293,8 +389,96 @@ export default function ChatBot() {
                 </div>
               </div>
             </div>
+            {/* Quick replies (per message) */}
+          <div className={`flex gap-3 max-w-[85%] lg:ml-34 xl:ml-44 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+
+            {msg.quick_replies && msg.quick_replies.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {msg.quick_replies.map((reply, i) => (
+                  <button
+                    key={i}
+                    onClick={() => sendMessage(reply)}
+                    className="px-4 py-1.5 bg-purple-200 text-purple-800 rounded-full hover:bg-purple-300 transition-all text-sm font-medium"
+                  >
+                    {reply}
+                  </button>
+                ))}
+              </div>
+            )}
+            </div>
+
           </div>
         ))}
+
+      <div className="max-w-7xl mx-auto space-y-6">
+{showChapters && Array.isArray(chapter) && (
+  <>
+    {/* Case 1: Flat list (Maths chapters) */}
+    {chapter.every(item => 'title' in item && !('chapters' in item)) ? (
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        {chapter.map((item, idx) => (
+          <button 
+            key={idx}
+            onClick={() => sendMessage(item.title)}
+            className="px-4 py-2 bg-pink-100 from-purple-100 to-pink-500 text-purple-800 font-medium rounded-full shadow-md hover:shadow-lg hover:from-purple-500 hover:to-pink-600 transition-all duration-300"
+          >
+            {item.title}
+          </button>
+        ))}
+      </div>
+    ) : (
+      // Case 2: English-style grouped by unit
+      chapter.map((unit, unitIdx) => (
+        <div 
+          key={unitIdx} 
+          className="mb-8 bg-gradient-to-r from-purple-50 to-pink-50 p-5 rounded-2xl shadow-inner"
+        >
+          <h3 className="text-xl font-bold text-purple-800 mb-4 border-b-2 border-purple-300 pb-2">
+            {unit.unit}
+          </h3>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {unit.chapters.map((item, idx) => (
+              <div
+               onClick={() => sendMessage(unit.unit + " : " +  item.title + "\n" + 'Grammer topics' + "\n" + item.grammarTopics.join(", ")).replace(/,/g, ', ')}
+                key={idx}
+                className="cursor-pointer p-4 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm hover:shadow-md hover:bg-gradient-to-br from-purple-100 to-pink-100 transition-all duration-300"
+              >
+                <button 
+                  className="w-full text-left font-semibold text-purple-700 hover:text-pink-700 transition-colors bg-pink-200"
+                >
+                  {item.title}
+                </button>
+
+                {/* Grammar Topics */}
+                <small className=" text-blue-500 px-3 py-1">Grammer topics</small>
+                {item.grammarTopics && item.grammarTopics.length > 0 && (
+                  
+                  <ul className="mt-2 text-sm text-gray-700 list-disc pl-5 space-y-1">
+                    {item.grammarTopics.map((topic, tIdx) => (
+                      <li 
+                        key={tIdx}
+                        className="hover:text-pink-600 transition-colors"
+                      >
+                        {topic}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))
+    )}
+  </>
+)}
+
+
+</div>
+
+
+
 
         {/* Loading indicator with enhanced animation */}
         {isLoading && (
@@ -317,7 +501,8 @@ export default function ChatBot() {
 
         <div ref={messagesEndRef} />
       </div>
-
+  
+     
       {/* Enhanced Input Area */}
       <div className="relative p-4 bg-white/80 backdrop-blur-xl border-t border-purple-100 shadow-2xl">
         <div className="absolute inset-0 bg-gradient-to-r from-purple-50 to-pink-50 opacity-50"></div>
@@ -344,7 +529,6 @@ export default function ChatBot() {
           </button>
         </div>
       </div>
-      
 
       {/* Enhanced Animations */}
       <style>{`
@@ -388,4 +572,4 @@ export default function ChatBot() {
       `}</style>
     </div>
   );
-  }
+}
