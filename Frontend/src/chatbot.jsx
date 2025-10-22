@@ -11,7 +11,7 @@ export default function ChatBot() {
   const messagesEndRef = useRef(null);
   const [showChapters, setShowChapters] = useState(true);
   const [prompt, setPrompt] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('gpt-4o-mini');
+  const [selectedModel, setSelectedModel] = useState('azure/gpt-4o-mini');
   const [showModelInfo, setShowModelInfo] = useState(false);
 
   const models = {
@@ -82,8 +82,6 @@ export default function ChatBot() {
 } else {
   setChapter(data?.data || []);
 }
-
-
   }
 
   // Generate or retrieve session_id
