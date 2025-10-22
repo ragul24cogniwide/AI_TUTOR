@@ -16,6 +16,7 @@ class QueryRequest(BaseModel):
     session_id: str
     question: str
     subject: str
+    prompt: bool
 
 # 🧠 Session memory map — stores one RetrivalChain per user session
 tutor_sessions: Dict[str, RetrievalChain] = {}
@@ -35,7 +36,7 @@ async def ask_question(request: QueryRequest):
 
     # Create or reuse retrieval chain
     if session_id not in tutor_sessions:
-        retriever = RetrievalChain(request.subject)
+        retriever = RetrievalChain(request.subject,request.prompt)
         retriever.get_documents()
         tutor_sessions[session_id] = retriever
     else:

@@ -10,7 +10,7 @@ from langchain.memory import ConversationBufferWindowMemory
 from langchain.chains import ConversationalRetrievalChain
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
-from app.tutor_assistant.prompts.prompt import get_system_prompt_maths,get_system_prompt_english
+from app.tutor_assistant.prompts.prompt import get_system_prompt_maths,get_system_prompt_english,get_system_prompt_maths_new
 from langchain.chat_models import AzureChatOpenAI
 import openai
 
@@ -96,17 +96,20 @@ class EmbeddingDocuments:
 # ───────────────────────────────────────────────
 # Retrieval Chain with Memory
 # ───────────────────────────────────────────────
+
 class RetrievalChain:
-    def __init__(self, subject: str):
-        # Embeddings
+    def __init__(self,subject: str,prompt:bool):
         self.embeddings = EmbeddingDocuments().embedding_model(
             embedding_model='sentence-transformers/all-MiniLM-L6-v2'
         )
 
-        # System prompt
-        self.system_prompt = get_system_prompt_maths() if subject == "maths" else get_system_prompt_english()
+        if subject == "maths":
+            self.system_prompt = get_system_prompt_maths_new() if prompt else get_system_prompt_maths()
+        else:
+            self.system_prompt = get_system_prompt_english()
+        
+        print(self.system_prompt)
 
-        # LLM
         self.llm = AzureChatOpenAI(
             openai_api_version=OPENAI_API_VERSION,
             openai_api_key=OPENAI_API_KEY,
@@ -117,54 +120,55 @@ class RetrievalChain:
             verbose=True,
         )
 
-        # Memory for last 20 exchanges
+        # 🧠 Maintain last 10 exchanges
         self.memory = ConversationBufferWindowMemory(
             memory_key="chat_history",
-            k=3,
-            return_messages=True
+            k=20,
+            return_messages=True   
         )
 
         self.retriever = None
         self.subject = subject
 
     def get_documents(self):
+        print(f"Getting documents for subject: { self.subject}")
         vectorstore = Chroma(
             persist_directory="chroma_db/books",
             embedding_function=self.embeddings,
         )
         self.retriever = vectorstore.as_retriever(
-            search_kwargs={
-                "k": 3,
-                "filter": {
+            search_kwargs={"k": 3, "filter": {
                     "$and": [
                         {"grade": "7"},
                         {"subject": self.subject}
                     ]
-                }
-            }
+                }}
         )
         return self.retriever
 
     def build_conversational_chain(self):
         if not self.retriever:
-            raise ValueError("Call get_documents() first.")
+            raise ValueError("Call get_documents() first to initialize the retriever.")
 
-        # Use system prompt + human template including chat history & context
+        # Custom prompt that correctly includes chat history + context
         prompt = ChatPromptTemplate.from_messages([
             ("system", self.system_prompt),
-            ("human", "CHAT HISTORY:\n{chat_history} \n Human:\n{question}")
+            ("human", "{input}")
         ])
 
-        # Build conversational retrieval chain with memory
-        retrieval_chain = ConversationalRetrievalChain.from_llm(
+        combine_docs_chain = create_stuff_documents_chain(
             llm=self.llm,
-            retriever=self.retriever,
-            memory=self.memory,
-            return_source_documents=False,
-            verbose=True,
-            combine_docs_chain_kwargs={"prompt": prompt},
-            rephrase_question=False,   
+            prompt=prompt,
         )
+
+        combine_docs_chain = combine_docs_chain.with_config({"verbose": True})
+
+        retrieval_chain = create_retrieval_chain(
+            retriever=self.retriever,
+            combine_docs_chain=combine_docs_chain,
+        )
+
+        retrieval_chain = retrieval_chain.with_config({"verbose": True})
 
         return retrieval_chain
 
@@ -172,112 +176,21 @@ class RetrievalChain:
         if not self.retriever:
             self.get_documents()
 
-        chain = self.build_conversational_chain()
+        retrieval_chain = self.build_conversational_chain()
 
-        # Optional: print formatted history for debugging
-     
-        # Call chain (memory is automatically used)
-        response = await chain.ainvoke({
-            "question": user_input,
-            "chat_history": self.memory.chat_memory.messages
+        # Format chat history into readable text for the prompt
+        formatted_history = "\n".join([
+            f"{m.type.capitalize()}: {m.content}" for m in self.memory.chat_memory.messages
+        ])
+
+        # ✅ Pass 'input', not 'question'
+        response = await retrieval_chain.ainvoke({
+            "input": user_input,
+            "chat_history": formatted_history,
         })
 
-        # No need to manually add to memory — handled by chain
+        # Store conversation in memory manually
+        self.memory.chat_memory.add_user_message(user_input)
+        self.memory.chat_memory.add_ai_message(response["answer"])
+
         return response["answer"]
-    
-# class RetrievalChain:
-#     def __init__(self,subject: str):
-#         self.embeddings = EmbeddingDocuments().embedding_model(
-#             embedding_model='sentence-transformers/all-MiniLM-L6-v2'
-#         )
-#         self.system_prompt = get_system_prompt_maths() if subject == "maths" else get_system_prompt_english()
-#         self.llm = AzureChatOpenAI(
-#             openai_api_version=OPENAI_API_VERSION,
-#             openai_api_key=OPENAI_API_KEY,
-#             openai_api_base=OPENAI_API_BASE,
-#             openai_api_type=OPENAI_API_TYPE,
-#             deployment_name="gpt-4o-mini",
-#             temperature=0,
-#             verbose=True,
-#         )
-
-#         # 🧠 Maintain last 10 exchanges
-#         self.memory = ConversationBufferWindowMemory(
-#             memory_key="chat_history",
-#             k=20,
-#             return_messages=True
-#         )
-
-#         self.retriever = None
-#         self.subject = subject
-
-#     def get_documents(self):
-#         print(f"Getting documents for subject: { self.subject}")
-#         vectorstore = Chroma(
-#             persist_directory="chroma_db/books",
-#             embedding_function=self.embeddings,
-#         )
-#         self.retriever = vectorstore.as_retriever(
-#             search_kwargs={"k": 3, "filter": {
-#                     "$and": [
-#                         {"grade": "7"},
-#                         {"subject": self.subject}
-#                     ]
-#                 }}
-#         )
-#         return self.retriever
-    
-
-#     def get_important_topics(self, query: str):
-#         print(f"Getting important topics for query: {query}")
-#         return self.retriever.invoke(query)
-
-#     def build_conversational_chain(self):
-#         if not self.retriever:
-#             raise ValueError("Call get_documents() first to initialize the retriever.")
-
-#         # Custom prompt that correctly includes chat history + context
-#         prompt = ChatPromptTemplate.from_messages([
-#             ("system", self.system_prompt),
-#             ("human", "{input}")
-#         ])
-
-#         combine_docs_chain = create_stuff_documents_chain(
-#             llm=self.llm,
-#             prompt=prompt,
-#         )
-
-#         combine_docs_chain = combine_docs_chain.with_config({"verbose": True})
-
-#         retrieval_chain = create_retrieval_chain(
-#             retriever=self.retriever,
-#             combine_docs_chain=combine_docs_chain,
-#         )
-
-#         retrieval_chain = retrieval_chain.with_config({"verbose": True})
-
-#         return retrieval_chain
-
-#     async def chat(self, user_input: str):
-#         if not self.retriever:
-#             self.get_documents()
-
-#         retrieval_chain = self.build_conversational_chain()
-
-#         # Format chat history into readable text for the prompt
-#         formatted_history = "\n".join([
-#             f"{m.type.capitalize()}: {m.content}" for m in self.memory.chat_memory.messages
-#         ])
-
-#         # ✅ Pass 'input', not 'question'
-#         response = await retrieval_chain.ainvoke({
-#             "input": user_input,
-#             "chat_history": formatted_history,
-#         })
-
-#         # Store conversation in memory manually
-#         self.memory.chat_memory.add_user_message(user_input)
-#         self.memory.chat_memory.add_ai_message(response["answer"])
-
-#         return response["answer"]
-    

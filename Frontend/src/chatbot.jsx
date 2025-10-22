@@ -10,6 +10,7 @@ export default function ChatBot() {
   const [chapter, setChapter] = useState([]);
   const messagesEndRef = useRef(null);
   const [showChapters, setShowChapters] = useState(true);
+  const [prompt, setPrompt] = useState(false);
 
   useEffect(()=>{
     sendMessage('clear')
@@ -93,7 +94,7 @@ export default function ChatBot() {
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, question: messageText, subject: subject }),
+      body: JSON.stringify({ session_id: sessionId, question: messageText, subject: subject, prompt:prompt=='true' ? true : false }),
     });
 
     if (!res.ok) {
@@ -173,7 +174,10 @@ export default function ChatBot() {
               <option value="english" className="bg-purple-600 text-white">English</option>
               <option value="maths" className="bg-purple-600 text-white">Mathematics</option>
             </select>
-                      <button onClick={()=>sendMessage('clear')} className="px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white border-2 border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 transition-all duration-300 shadow-lg hover:bg-white/30 text-sm font-medium cursor-pointer">clear</button>
+
+        <input type="checkbox" id="prompt" name="prompt" value="true" onChange={(e)=>setPrompt(e.target.value)}/>
+        <label for="prompt">New Prompt</label>     
+        <button onClick={()=>sendMessage('clear')} className="px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white border-2 border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 transition-all duration-300 shadow-lg hover:bg-white/30 text-sm font-medium cursor-pointer">clear</button>
 
           </div>
 
