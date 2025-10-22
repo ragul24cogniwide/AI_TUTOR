@@ -17,6 +17,7 @@ class QueryRequest(BaseModel):
     question: str
     subject: str
     prompt: bool
+    model:str
 
 # 🧠 Session memory map — stores one RetrivalChain per user session
 tutor_sessions: Dict[str, RetrievalChain] = {}
@@ -36,7 +37,7 @@ async def ask_question(request: QueryRequest):
 
     # Create or reuse retrieval chain
     if session_id not in tutor_sessions:
-        retriever = RetrievalChain(request.subject,request.prompt)
+        retriever = RetrievalChain(request.subject, request.prompt,request.model)
         retriever.get_documents()
         tutor_sessions[session_id] = retriever
     else:
@@ -44,27 +45,28 @@ async def ask_question(request: QueryRequest):
 
     # Ask the question
     result_raw = await retriever.chat(question)
-    print("raw data :", result_raw)
+    print("raw data:", result_raw)
 
-    # Step 1: Remove the markdown block ```json ... ```
+    # Try to extract structured JSON from markdown format
     cleaned_json_str = re.sub(r'```json\s*([\s\S]*?)\s*```', r'\1', result_raw)
 
     try:
         result = json.loads(cleaned_json_str)
-    except json.JSONDecodeError:
-        result = {}  # fallback if JSON is invalid
-
-    parsed_result = {}
-    if isinstance(result, dict):
-        # Step 2: Extract the parsed values
+        # Structured JSON response
         parsed_result = {
             "response": result.get("answer", "").strip(),
             "correct_answer": result.get("correct_answer", False),
             "quick_replies": result.get("quick_replies", []),
         }
-        return parsed_result
-    else:
-        return result_raw
+    except json.JSONDecodeError:
+        # Fallback: Raw string as plain response
+        parsed_result = {
+            "response": result_raw.strip(),
+            "correct_answer": False,
+            "quick_replies": [],
+        }
+
+    return parsed_result
 
 
 @tutor_router.get("/get-initial-response/{subject}")

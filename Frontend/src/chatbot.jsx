@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, User, Image, Sparkles } from 'lucide-react';
+import { Send, User, Image, Sparkles, Info } from 'lucide-react';
 
 export default function ChatBot() {
   const starter = "Hey there! Ready to learn something cool today? Ask me anything!";
@@ -11,16 +11,54 @@ export default function ChatBot() {
   const messagesEndRef = useRef(null);
   const [showChapters, setShowChapters] = useState(true);
   const [prompt, setPrompt] = useState(false);
+  const [selectedModel, setSelectedModel] = useState('gpt-4o-mini');
+  const [showModelInfo, setShowModelInfo] = useState(false);
+
+  const models = {
+    'azure/gpt-4o-mini': {
+      name: 'GPT-4o Mini (Azure)',
+      contextWindow: '128k tokens', 
+      inputCost: '$0.15 / 1M tokens',           
+      outputCost: '$0.60 / 1M tokens',          
+      costPer: 'per 1M tokens',
+      description: 'Cost efficient multitmodal model with vision support and large context window'
+    },
+    'llama-3.1-8b-instant': {
+      name: 'Llama 3.1 8B Instant',
+      contextWindow: '128k tokens',
+      inputCost: '$0.05',
+      outputCost: '$0.08',
+      costPer: 'per 1M tokens',
+      description: 'Fast and efficient for general tasks'
+    },
+    'openai/gpt-oss-20b': {
+      name: 'GPT OSS 20B',
+      contextWindow: '128k tokens',
+      inputCost: '$0.59',
+      outputCost: '$0.79',
+      costPer: 'per 1M tokens',
+      description: 'Balanced performance and cost'
+    },
+    'qwen/qwen3-32b': {
+      name: 'Qwen3 32B',
+      contextWindow: '131k tokens',
+      inputCost: '$0.35',
+      outputCost: '$0.40',
+      costPer: 'per 1M tokens',
+      description: 'High quality reasoning'
+    },
+  };
 
   useEffect(()=>{
     sendMessage('clear')
     initialMessage(subject)
   },[subject]);
 
-  const API_URL = 'https://schooldigitalised.cogniwide.com/api/sd/tutor/ask';
+  const local= false;
+  const API_URL = local ? 'http://localhost:8100' :'https://schooldigitalised.cogniwide.com/api/sd/';
 
   const initialMessage = async (subject) => {
-    const response = await fetch(`https://schooldigitalised.cogniwide.com/api/sd/tutor/get-initial-response/${subject}`);
+    const response = await fetch(`${API_URL}/tutor/get-initial-response/${subject}`);
     const data = await response.json();
     setMessages(prev => [...prev, { role: 'assistant', content: data?.response}]);
     console.log(data?.data);
@@ -91,10 +129,16 @@ export default function ChatBot() {
   setIsLoading(true);
 
   try {
-    const res = await fetch(API_URL, {
+    const res = await fetch(API_URL + '/tutor/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, question: messageText, subject: subject, prompt:prompt=='true' ? true : false }),
+      body: JSON.stringify({ 
+        session_id: sessionId, 
+        question: messageText, 
+        subject: subject, 
+        prompt: prompt=='true' ? true : false,
+        model: selectedModel 
+      }),
     });
 
     if (!res.ok) {
@@ -165,7 +209,6 @@ export default function ChatBot() {
           
           {/* Subject Dropdown in Header */}
           <div className="flex items-center gap-2">
-            {/* <label className="text-sm font-medium text-white/90">Subject:</label> */}
             <select
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
@@ -176,7 +219,7 @@ export default function ChatBot() {
             </select>
 
         <input type="checkbox" id="prompt" name="prompt" value="true" onChange={(e)=>setPrompt(e.target.value)}/>
-        <label for="prompt">New Prompt</label>     
+        <label htmlFor="prompt">New Prompt</label>     
         <button onClick={()=>sendMessage('clear')} className="px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white border-2 border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 transition-all duration-300 shadow-lg hover:bg-white/30 text-sm font-medium cursor-pointer">clear</button>
 
           </div>
@@ -246,32 +289,6 @@ export default function ChatBot() {
                     className="whitespace-pre-wrap break-words leading-relaxed text-sm sm:text-base"
                     dangerouslySetInnerHTML={{ __html: msg.content }}
                   />
-
-                  {/* Images with improved layout */}
-                  {/* {msg.images?.length > 0 && (
-                    <div className="mt-5 space-y-3">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-purple-600">
-                        <Image className="w-4 h-4" />
-                        <span>Related diagrams</span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {msg.images.map((img, i) => (
-                          <div
-                            key={i}
-                            className="relative group/img border-2 border-purple-100 rounded-2xl overflow-hidden bg-white shadow-md hover:shadow-2xl transition-all duration-300 hover:scale-105"
-                          >
-                            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-pink-500/10 opacity-0 group-hover/img:opacity-100 transition-opacity duration-300"></div>
-                            <img
-                              src={`http://127.0.0.1:8000/app/tutor_assistant/output/${img.name}`}
-                              alt="Diagram"
-                              className="relative w-full h-auto max-h-80 object-contain p-2"
-                              onError={(e) => { e.target.style.display = 'none'; }}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )} */}
                 </div>
               </div>
             </div>
@@ -389,30 +406,92 @@ export default function ChatBot() {
       </div>
   
      
-      {/* Enhanced Input Area */}
+      {/* Enhanced Input Area with Model Selection */}
       <div className="relative p-4 bg-white/80 backdrop-blur-xl border-t border-purple-100 shadow-2xl">
         <div className="absolute inset-0 bg-gradient-to-r from-purple-50 to-pink-50 opacity-50"></div>
-        <div className="relative flex gap-2">
-          <div className="flex-1 relative group">
-            <div className="absolute inset-0 bg-gradient-to-r from-purple-400 to-pink-400 rounded-2xl blur-lg opacity-0 group-focus-within:opacity-20 transition-opacity duration-300"></div>
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask me anything..."
-              disabled={isLoading}
-              rows={1}
-              className="relative w-full px-5 py-3 text-sm rounded-2xl bg-white text-gray-800 border-2 border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none transition-all duration-300 shadow-md hover:shadow-lg placeholder-gray-400"
-            />
+        <div className="relative space-y-3">
+          {/* Model Selection Row */}
+          <div className="flex items-center gap-2 px-1">
+            <label className="text-xs font-medium text-gray-600 whitespace-nowrap">AI Model:</label>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-white border border-purple-200 text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer"
+            >
+              <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant (128k)</option>
+              <option value="openai/gpt-oss-20b">GPT OSS 20B (128k)</option>
+              <option value="qwen/qwen3-32b">Qwen3 32B (131k)</option>
+              <option value="azure/gpt-4o-mini">GPT-4o-mini</option>
+            </select>
+            
+            {/* Info Button */}
+            <div className="relative">
+              <button
+                onClick={() => setShowModelInfo(!showModelInfo)}
+                className="p-1.5 rounded-lg bg-purple-100 text-purple-600 hover:bg-purple-200 transition-all duration-300 shadow-sm hover:shadow-md"
+                title="Model Information"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+              
+              {/* Info Popup */}
+              {showModelInfo && (
+                <div className="absolute bottom-full right-0 mb-2 w-80 bg-white rounded-xl shadow-2xl border-2 border-purple-200 p-4 z-50 animate-slideIn">
+                  <button
+                    onClick={() => setShowModelInfo(false)}
+                    className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-xl leading-none w-6 h-6 flex items-center justify-center"
+                  >
+                    ×
+                  </button>
+                  <h4 className="font-bold text-purple-700 mb-3 pr-6 text-sm">{models[selectedModel].name}</h4>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between py-1.5 border-b border-gray-100">
+                      <span className="text-gray-600 font-medium">Context Window:</span>
+                      <span className="font-semibold text-purple-600">{models[selectedModel].contextWindow}</span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-gray-100">
+                      <span className="text-gray-600 font-medium">Input Cost:</span>
+                      <span className="font-semibold text-green-600">{models[selectedModel].inputCost}</span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-gray-100">
+                      <span className="text-gray-600 font-medium">Output Cost:</span>
+                      <span className="font-semibold text-green-600">{models[selectedModel].outputCost}</span>
+                    </div>
+                    <div className="pt-1 pb-1">
+                      <span className="text-gray-500 italic">{models[selectedModel].costPer}</span>
+                    </div>
+                    <div className="pt-2 border-t border-gray-100">
+                      <p className="text-gray-600">{models[selectedModel].description}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          <button
-            onClick={() => sendMessage()}
-            disabled={!input.trim() || isLoading}
-            className="relative group bg-gradient-to-r from-purple-600 to-pink-600 text-white px-5 py-3 rounded-2xl hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all duration-300 shadow-lg hover:shadow-xl disabled:hover:shadow-lg transform hover:scale-105 disabled:hover:scale-100"
-          >
-            <div className="absolute inset-0 bg-white rounded-2xl blur-lg opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
-            <Send className="relative w-5 h-5" />
-          </button>
+
+          {/* Input Row */}
+          <div className="flex gap-2">
+            <div className="flex-1 relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-400 to-pink-400 rounded-2xl blur-lg opacity-0 group-focus-within:opacity-20 transition-opacity duration-300"></div>
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask me anything..."
+                disabled={isLoading}
+                rows={1}
+                className="relative w-full px-5 py-3 text-sm rounded-2xl bg-white text-gray-800 border-2 border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none transition-all duration-300 shadow-md hover:shadow-lg placeholder-gray-400"
+              />
+            </div>
+            <button
+              onClick={() => sendMessage()}
+              disabled={!input.trim() || isLoading}
+              className="relative group bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-1 rounded-2xl hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all duration-300 shadow-lg hover:shadow-xl disabled:hover:shadow-lg transform hover:scale-105 disabled:hover:scale-100"
+            >
+              <div className="absolute inset-0 bg-white rounded-2xl blur-lg opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+              <Send className="relative w-5 h-5" />
+            </button>
+          </div>
         </div>
       </div>
 

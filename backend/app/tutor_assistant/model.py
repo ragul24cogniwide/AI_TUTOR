@@ -27,6 +27,7 @@ openai.api_base = OPENAI_API_BASE
 openai.api_version = OPENAI_API_VERSION
 openai.api_key = OPENAI_API_KEY
 
+groq_api_key=os.getenv('GROQ_API_KEY')
 # ───────────────────────────────────────────────
 # Tutor Assistant Classes
 # ───────────────────────────────────────────────
@@ -67,8 +68,7 @@ class ChunkData:
         subject_value = metadata_key.split('_')[1]
         grade_value = metadata_key.split('_')[2].split('.')[0]
 
-        print("subject:", subject_value)
-        print("grade:", grade_value)
+    
 
         for i, chunk in enumerate(chunks):
             doc = Document(
@@ -98,7 +98,7 @@ class EmbeddingDocuments:
 # ───────────────────────────────────────────────
 
 class RetrievalChain:
-    def __init__(self,subject: str,prompt:bool):
+    def __init__(self,subject: str,prompt:bool, model:str):
         self.embeddings = EmbeddingDocuments().embedding_model(
             embedding_model='sentence-transformers/all-MiniLM-L6-v2'
         )
@@ -108,17 +108,24 @@ class RetrievalChain:
         else:
             self.system_prompt = get_system_prompt_english()
         
-        print(self.system_prompt)
-
-        self.llm = AzureChatOpenAI(
-            openai_api_version=OPENAI_API_VERSION,
-            openai_api_key=OPENAI_API_KEY,
-            openai_api_base=OPENAI_API_BASE,
-            openai_api_type=OPENAI_API_TYPE,
-            deployment_name="gpt-4o-mini",
-            temperature=0,
-            verbose=True,
-        )
+        if model == "llama-3.1-8b-instant" or model == "qwen/qwen3-32b" or model == "openai/gpt-oss-20b":
+            self.llm = ChatGroq(
+                api_key=groq_api_key,
+                model=model,
+                verbose=True,
+            )
+        else:
+            self.llm = AzureChatOpenAI(
+                openai_api_version=OPENAI_API_VERSION,
+                openai_api_key=OPENAI_API_KEY,
+                openai_api_base=OPENAI_API_BASE,
+                openai_api_type=OPENAI_API_TYPE,
+                deployment_name="gpt-4o-mini",
+                temperature=0,
+                verbose=True,
+            )
+        
+        print("choosed model:", model)
 
         # 🧠 Maintain last 10 exchanges
         self.memory = ConversationBufferWindowMemory(
