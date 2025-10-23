@@ -13,7 +13,10 @@ export default function ChatBot() {
   const [file, setFile] = useState(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [ setSessionId] = useState(null);
+  const [sessionIds, setSessionIds] = useState(null); //
+  const [isPdfMode, setIsPdfMode] = useState(false); //
+
+
 
   useEffect(()=>{
     sendMessage('clear')
@@ -140,11 +143,11 @@ export default function ChatBot() {
       const res = await fetch("http://127.0.0.1:8000/assignment/send-message", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          session_id: sessionId,
+        body: new URLSearchParams({//
+          session_id: sessionIds,
           student_message: messageText
         })
-      });
+      });//
  
       if (!res.ok) {
         const errText = await res.text();
@@ -191,8 +194,10 @@ export default function ChatBot() {
       const startData = await startRes.json();
       console.log("✅ Session started:", startData);
  
-      // ✅ Store backend session_id globally for future messages
-      setSessionId(startData.session_id);
+      if (startData.session_id) { //
+      setSessionIds(startData.session_id); //
+      setIsPdfMode(true);  //
+    } //
  
       // ✅ Show first AI message (based on uploaded content)
       if (startData.ai_message) {
@@ -223,9 +228,16 @@ export default function ChatBot() {
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (input.trim()) sendMessage();
+      if (input.trim()) { //
+      if (isPdfMode) {  //
+        sendmessages();  //
+      } else { //
+        sendMessage(); //
+      }
     }
-  };
+  }
+    } //
+  
 
   return (
     <div className="h-screen w-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex flex-col overflow-hidden">
@@ -519,14 +531,15 @@ export default function ChatBot() {
               className="relative w-full px-5 py-3 text-sm rounded-2xl bg-white text-gray-800 border-2 border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none transition-all duration-300 shadow-md hover:shadow-lg placeholder-gray-400"
             />
           </div>
-          <button
-            onClick={() => sendMessage()}
-            disabled={!input.trim() || isLoading}
-            className="relative group bg-gradient-to-r from-purple-600 to-pink-600 text-white px-5 py-3 rounded-2xl hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all duration-300 shadow-lg hover:shadow-xl disabled:hover:shadow-lg transform hover:scale-105 disabled:hover:scale-100"
-          >
-            <div className="absolute inset-0 bg-white rounded-2xl blur-lg opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
-            <Send className="relative w-5 h-5" />
-          </button>
+          <button //
+  onClick={() => (isPdfMode ? sendmessages() : sendMessage())}
+  disabled={!input.trim() || isLoading}
+  className="relative group bg-gradient-to-r from-purple-600 to-pink-600 text-white px-5 py-3 rounded-2xl hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all duration-300 shadow-lg hover:shadow-xl disabled:hover:shadow-lg transform hover:scale-105 disabled:hover:scale-100"
+>
+  <div className="absolute inset-0 bg-white rounded-2xl blur-lg opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+  <Send className="relative w-5 h-5" />
+</button>
+//
         </div>
       </div>
 

@@ -1,28 +1,24 @@
-# Core LangChain
-langchain
+# Core LangChain (pre-1.0)
+langchain==0.3.27
+langchain-community>=0.0.166
+# LangChain community modules
+chromadb ==0.6.3
+langchain-groq ==0.3.8
 
-# LangChain community modules (Chroma & other vectorstores)
-langchain-community
+# Embeddings
+sentence-transformers == 2.2.2
+transformers  ==4.33.2
+torch ==2.2.0
+langchain-text-splitters==0.3.9
 
-# Chroma vector database
-chromadb
-
-# HuggingFace embeddings for local/free embeddings
-sentence-transformers
-transformers
-torch
-
-# Azure/OpenAI (optional if you want to switch back to Azure embeddings)
-# openai>=1.27.0
-
-# Environment variable management (optional but recommended)
-
-
+# FastAPI stack
 fastapi==0.104.0
 uvicorn[standard]==0.24.0
 
-langchain-groq
+# OpenAI
 openai>=1.6.0
+
+# Utilities
 python-dotenv
 pdf2image
 pytesseract

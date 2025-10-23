@@ -11,9 +11,8 @@ from .prompts import get_supervision_prompt
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
 
-app = FastAPI()
 
-TEMP_FOLDER = os.path.join(os.path.dirname(__file__), "temp_images")
+TEMP_FOLDER = os.path.join(os.path.dirname(__file__), "pdf_images")
 os.makedirs(TEMP_FOLDER, exist_ok=True)
 
 # Store session memories
@@ -78,8 +77,11 @@ async def start_session(file: UploadFile = File(...)):
                 {"status": "error", "message": "Unsupported file type. Upload PDF or DOCX."},
                 status_code=400,
             )
+     
+
 
         combined_text = "\n\n".join(ocr_texts)
+        print("OACR extracted text:", combined_text[:500])
         safe_prompt = get_supervision_prompt(combined_text)
 
         # ----------------- Initialize LangChain Memory -----------------
@@ -178,7 +180,7 @@ async def session_history(session_id: str):
     return JSONResponse({"status": "success", "history": history})
 
 
-app.include_router(assign_route)
+
 
 
 
