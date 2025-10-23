@@ -57,7 +57,7 @@ export default function ChatBot() {
     initialMessage(subject)
   }, [subject]);
 
-  const local = true;
+  const local = false;
   const API_URL = local ? 'http://localhost:8100' : 'https://schooldigitalised.cogniwide.com/api/sd';
 
   const initialMessage = async (subject) => {
